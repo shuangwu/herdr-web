@@ -10,9 +10,18 @@ import {
   parseDesktopCommandEnterNewline,
   parseTerminalFontSizePx,
   parseTerminalCursorBlink,
+  parseTerminalFont,
+  parseTerminalTheme,
 } from "./terminalPrefs";
 
 describe("terminal preferences", () => {
+  it("accepts supported appearance choices and ignores invalid stored values", () => {
+    expect(parseTerminalTheme("solarized")).toBe("solarized");
+    expect(parseTerminalTheme("unknown")).toBe("catppuccin");
+    expect(parseTerminalFont("jetbrains")).toBe("jetbrains");
+    expect(parseTerminalFont("menlo")).toBe("menlo");
+    expect(parseTerminalFont("unsupported")).toBe("system");
+  });
   it("parses and clamps the terminal font size", () => {
     expect(parseTerminalFontSizePx(13)).toBe(13);
     expect(parseTerminalFontSizePx(16.7)).toBe(17);

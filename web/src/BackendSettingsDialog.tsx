@@ -44,6 +44,7 @@ import {
   MIN_TERMINAL_FONT_SIZE_PX,
   parseTerminalFontSizePx,
 } from "./terminalPrefs";
+import type { TerminalFont, TerminalTheme } from "./terminalPrefs";
 import {
   MOBILE_TOUCH_SELECTION_ENDPOINT_TIMEOUT_OPTIONS_MS,
 } from "./mobileTerminalPrefs";
@@ -72,6 +73,10 @@ type Props = {
   onMultiHostSpaceSelection: (enabled: boolean) => void;
   terminalFontSizePx: number;
   onTerminalFontSizePx: (value: number) => void;
+  terminalFont: TerminalFont;
+  onTerminalFont: (value: TerminalFont) => void;
+  terminalTheme: TerminalTheme;
+  onTerminalTheme: (value: TerminalTheme) => void;
   terminalCursorBlink: boolean;
   onTerminalCursorBlink: (enabled: boolean) => void;
   desktopCommandComposer: boolean;
@@ -138,6 +143,10 @@ export function BackendSettingsDialog({
   onMultiHostSpaceSelection,
   terminalFontSizePx,
   onTerminalFontSizePx,
+  terminalFont,
+  onTerminalFont,
+  terminalTheme,
+  onTerminalTheme,
   terminalCursorBlink,
   onTerminalCursorBlink,
   desktopCommandComposer,
@@ -705,6 +714,21 @@ export function BackendSettingsDialog({
             {activeArea === "terminal" ? (
               <div className="settings-section settings-section-flat">
                 <div className="settings-label">Terminal appearance</div>
+                <label className="settings-row">
+                  <span>Color theme</span>
+                  <select value={terminalTheme} onChange={(event) => onTerminalTheme(event.target.value as TerminalTheme)}>
+                    <option value="catppuccin">Catppuccin Mocha</option>
+                    <option value="solarized">Solarized Dark</option>
+                  </select>
+                </label>
+                <label className="settings-row">
+                  <span>Font</span>
+                  <select value={terminalFont} onChange={(event) => onTerminalFont(event.target.value as TerminalFont)}>
+                    <option value="system">System monospace</option>
+                    <option value="menlo">Menlo</option>
+                    <option value="jetbrains">JetBrains Mono Nerd Font</option>
+                  </select>
+                </label>
                 <div className="settings-row">
                   <span>Font size</span>
                   <NumberSettingControl

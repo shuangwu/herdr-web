@@ -32,8 +32,13 @@ import type {
 } from "./mobileTerminalPrefs";
 import {
   DEFAULT_TERMINAL_FONT_SIZE_PX,
+  DEFAULT_TERMINAL_FONT,
+  DEFAULT_TERMINAL_THEME,
+  TERMINAL_FONT_FAMILIES,
+  TERMINAL_THEMES,
   defaultTerminalCursorBlink,
 } from "./terminalPrefs";
+import type { TerminalFont, TerminalTheme } from "./terminalPrefs";
 import {
   beforeInputOutput,
   idleTerminalImeState,
@@ -47,8 +52,6 @@ import {
 import type { TerminalImeState } from "./terminalImeInput";
 import { installTerminalImeFocusRedirect } from "./terminalImeFocus";
 
-const TERMINAL_FONT_FAMILY =
-  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "JetBrainsMono Nerd Font Mono", monospace';
 const TERMINAL_TEXT_INPUT_TAP_GRACE_MS = 4000;
 const TOUCH_SELECTION_LONG_PRESS_MS = 600;
 const TOUCH_SELECTION_TOLERANCE_PX = 10;
@@ -151,6 +154,8 @@ export type TerminalRenderer = {
   fit(): TerminalSize;
   refreshMetrics(): TerminalSize;
   setFontSize(fontSizePx: number): TerminalSize | null;
+  setFont(font: TerminalFont): TerminalSize | null;
+  setTheme(theme: TerminalTheme): void;
   focus(): void;
   focusTextInput(): void;
   clearSelection(): void;
@@ -177,14 +182,19 @@ export class GhosttyRenderer implements TerminalRenderer {
     DEFAULT_MOBILE_TOUCH_SELECTION_ENDPOINT_TIMEOUT_MS;
   #textInputTapGraceUntil = 0;
   #fontSizePx: number;
+  #font: TerminalFont;
+  #theme: TerminalTheme;
   #cursorBlink: boolean;
   #eventDrivenRendering: boolean;
   #renderFrameId: number | null = null;
   #renderInteractionCleanup: (() => void) | null = null;
   #disposed = false;
 
-  constructor(fontSizePx = DEFAULT_TERMINAL_FONT_SIZE_PX, cursorBlink = true) {
+  constructor(fontSizePx = DEFAULT_TERMINAL_FONT_SIZE_PX, cursorBlink = true,
+    font: TerminalFont = DEFAULT_TERMINAL_FONT, theme: TerminalTheme = DEFAULT_TERMINAL_THEME) {
     this.#fontSizePx = fontSizePx;
+    this.#font = font;
+    this.#theme = theme;
     this.#cursorBlink = cursorBlink;
     this.#eventDrivenRendering = shouldUseEventDrivenTerminalRendering(cursorBlink);
   }
@@ -199,32 +209,11 @@ export class GhosttyRenderer implements TerminalRenderer {
     const terminal = new Terminal({
       convertEol: false,
       cursorBlink: this.#cursorBlink,
-      fontFamily: TERMINAL_FONT_FAMILY,
+      fontFamily: TERMINAL_FONT_FAMILIES[this.#font],
       fontSize: this.#fontSizePx,
       scrollback: 8000,
       smoothScrollDuration: 0,
-      theme: {
-        background: "#11111b",
-        foreground: "#cdd6f4",
-        cursor: "#f5e0dc",
-        selectionBackground: "#45475a",
-        black: "#45475a",
-        red: "#f38ba8",
-        green: "#a6e3a1",
-        yellow: "#f9e2af",
-        blue: "#89b4fa",
-        magenta: "#f5c2e7",
-        cyan: "#94e2d5",
-        white: "#bac2de",
-        brightBlack: "#585b70",
-        brightRed: "#f38ba8",
-        brightGreen: "#a6e3a1",
-        brightYellow: "#f9e2af",
-        brightBlue: "#89b4fa",
-        brightMagenta: "#f5c2e7",
-        brightCyan: "#94e2d5",
-        brightWhite: "#a6adc8",
-      },
+      theme: TERMINAL_THEMES[this.#theme],
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
@@ -241,7 +230,7 @@ export class GhosttyRenderer implements TerminalRenderer {
     terminal.textarea?.blur();
     container.blur();
     container.removeAttribute("contenteditable");
-    terminal.renderer?.getCanvas().style.setProperty("background-color", "#11111b");
+    terminal.renderer?.getCanvas().style.setProperty("background-color", TERMINAL_THEMES[this.#theme].background);
     terminal.renderer?.getCanvas().style.setProperty("image-rendering", "auto");
     this.#terminal = terminal;
     this.#fitAddon = fitAddon;
@@ -316,7 +305,7 @@ export class GhosttyRenderer implements TerminalRenderer {
     const terminal = this.#requireTerminal();
     return refreshTerminalFontRendering(
       terminal,
-      TERMINAL_FONT_FAMILY,
+      TERMINAL_FONT_FAMILIES[this.#font],
       this.#fontSizePx,
       () => this.fit(),
     );
@@ -328,6 +317,21 @@ export class GhosttyRenderer implements TerminalRenderer {
       return null;
     }
     return this.refreshMetrics();
+  }
+
+  setFont(font: TerminalFont) {
+    this.#font = font;
+    return this.#terminal ? this.refreshMetrics() : null;
+  }
+
+  setTheme(theme: TerminalTheme) {
+    this.#theme = theme;
+    if (this.#terminal) {
+      this.#terminal.options.theme = TERMINAL_THEMES[theme];
+      this.#terminal.renderer?.setTheme(TERMINAL_THEMES[theme]);
+    }
+    this.#terminal?.renderer?.getCanvas().style.setProperty("background-color", TERMINAL_THEMES[theme].background);
+    if (this.#terminal) this.#requestRender(this.#terminal);
   }
 
   focus() {
@@ -1474,8 +1478,10 @@ export function refreshTerminalFontRendering(
   fontSizePx: number,
   fit: () => TerminalSize,
 ) {
+  const fontChanged = terminal.options.fontFamily !== fontFamily;
   terminal.options.fontFamily = fontFamily;
   terminal.options.fontSize = fontSizePx;
+  if (fontChanged) terminal.renderer?.setFontFamily(fontFamily);
   terminal.renderer?.remeasureFont();
   const size = fit();
   if (terminal.renderer && terminal.wasmTerm) {
@@ -1605,7 +1611,7 @@ function positionGhosttyTextareaForInput(
   textarea.style.background = "transparent";
   textarea.style.caretColor = "transparent";
   textarea.style.overflow = "hidden";
-  textarea.style.fontFamily = TERMINAL_FONT_FAMILY;
+  textarea.style.fontFamily = terminal.options.fontFamily;
   textarea.style.fontSize = `${anchor.fontSizePx}px`;
   textarea.style.lineHeight = `${anchor.height}px`;
   textarea.style.zIndex = "5";
@@ -1642,7 +1648,7 @@ function updateImePreeditOverlay(
   overlay.style.left = `${anchorLeft}px`;
   overlay.style.top = `${anchorTop}px`;
   overlay.style.maxWidth = `${maxWidth}px`;
-  overlay.style.fontFamily = TERMINAL_FONT_FAMILY;
+  overlay.style.fontFamily = terminal.options.fontFamily;
   overlay.style.fontSize = `${fontSize}px`;
   overlay.style.lineHeight = lineHeight;
   overlay.style.minHeight = lineHeight;

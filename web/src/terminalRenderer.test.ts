@@ -69,6 +69,12 @@ describe("terminal event-driven rendering", () => {
 });
 
 describe("terminal renderer font refresh", () => {
+  it("updates the canvas renderer when the selected font changes", () => {
+    const renderer = { setFontFamily: vi.fn(), remeasureFont: vi.fn(), render: vi.fn() };
+    const terminal = { options: { fontFamily: "old", fontSize: 13 }, renderer, viewportY: 0 } as unknown as Parameters<typeof refreshTerminalFontRendering>[0];
+    refreshTerminalFontRendering(terminal, "new", 13, () => ({ cols: 80, rows: 24 }));
+    expect(renderer.setFontFamily).toHaveBeenCalledWith("new");
+  });
   it("forces the current viewport to redraw when font settings are unchanged", () => {
     const calls: string[] = [];
     const wasmTerm = {};

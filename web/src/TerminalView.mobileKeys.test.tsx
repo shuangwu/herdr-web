@@ -12,6 +12,8 @@ const renderer = vi.hoisted(() => ({
   refreshMetrics: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
   clearSelection: vi.fn(),
   setFontSize: vi.fn(),
+  setFont: vi.fn(),
+  setTheme: vi.fn(),
   setScrollSensitivity: vi.fn(),
   setTapFocusHandler: vi.fn(),
   setMobileTouchSelection: vi.fn(),
