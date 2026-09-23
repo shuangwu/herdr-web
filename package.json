@@ -9,6 +9,8 @@
     "build:web": "npm run build --prefix web",
     "test:dev": "node --test scripts/dev.test.mjs",
     "test:release": "node --test scripts/release.test.mjs",
+    "test:remote": "node --test scripts/remote-gateway.test.mjs",
+    "remote": "node scripts/remote-setup.mjs",
     "test:web": "npm run test --prefix web",
     "lint:web": "npm run lint --prefix web",
     "vendor:check": "scripts/check-vendor.sh",
@@ -20,7 +22,7 @@
     "android:open": "cap open android",
     "package:tarball": "scripts/package-tarball.sh",
     "build": "npm run build:web && npm run bridge:build",
-    "test": "npm run test:dev && npm run test:release && npm run test:web && npm run bridge:test",
+    "test": "npm run test:dev && npm run test:release && npm run test:remote && npm run test:web && npm run bridge:test",
     "lint": "npm run lint:web && npm run bridge:fmt",
     "check": "npm run vendor:check && npm run lint && npm run test && npm run build"
   },

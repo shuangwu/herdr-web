@@ -122,6 +122,10 @@ npm install --prefix web
 
 ## Development Server (HMR)
 
+For supervised local/remote bridges and reconnecting SSH tunnels on macOS, see
+[persistent remote setup](docs/remote-setup.md). This serves the production web build at the same
+local address and must run separately from the development server.
+
 Start the bridge and Vite together from the repository root:
 
 ```bash

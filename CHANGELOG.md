@@ -6,6 +6,9 @@
 
 ### Added
 
+- Add macOS remote setup scripts with supervised Linux bridges, reconnecting SSH tunnels,
+  a local gateway, and a browser page for merging saved bridge profiles.
+
 - Allow configured bridge URLs to include a reverse-proxy path prefix for same-origin multi-bridge
   deployments. [PR #94](https://github.com/kcosr/herdr-web/pull/94), contributed by
   [Will Hampson (@Whamp)](https://github.com/Whamp).
