@@ -1769,6 +1769,7 @@ button {
   padding: 10px 8px 8px 12px;
   outline: none;
   overflow: hidden;
+  background: var(--term-bg);
   touch-action: none;
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0, "kern" 0;

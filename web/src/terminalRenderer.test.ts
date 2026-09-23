@@ -65,6 +65,8 @@ describe("terminal event-driven rendering", () => {
 
     expect(renderGhosttyTerminalFrame(terminal)).toBe(true);
     expect(renderer.render).toHaveBeenCalledWith(wasmTerm, false, 8, terminal, 0.4);
+    expect(renderGhosttyTerminalFrame(terminal, true)).toBe(true);
+    expect(renderer.render).toHaveBeenLastCalledWith(wasmTerm, true, 8, terminal, 0.4);
   });
 });
 

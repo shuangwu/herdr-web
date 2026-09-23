@@ -331,7 +331,8 @@ export class GhosttyRenderer implements TerminalRenderer {
       this.#terminal.renderer?.setTheme(TERMINAL_THEMES[theme]);
     }
     this.#terminal?.renderer?.getCanvas().style.setProperty("background-color", TERMINAL_THEMES[theme].background);
-    if (this.#terminal) this.#requestRender(this.#terminal);
+    // Ghostty normally repaints dirty rows only; palette changes affect every cell.
+    if (this.#terminal) renderGhosttyTerminalFrame(this.#terminal, true);
   }
 
   focus() {
@@ -1533,14 +1534,14 @@ export function shouldUseEventDrivenTerminalRendering(
   return !cursorBlink && !defaultTerminalCursorBlink(platform);
 }
 
-export function renderGhosttyTerminalFrame(terminal: Terminal) {
+export function renderGhosttyTerminalFrame(terminal: Terminal, force = false) {
   const access = terminal as unknown as GhosttyRenderAccess;
   if (!access.renderer || !access.wasmTerm) {
     return false;
   }
   access.renderer.render(
     access.wasmTerm,
-    false,
+    force,
     access.viewportY,
     terminal,
     access.scrollbarOpacity ?? 0,
