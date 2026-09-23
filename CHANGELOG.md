@@ -6,8 +6,8 @@
 
 ### Added
 
-- Add selectable Solarized Dark and Catppuccin terminal palettes plus system, Menlo, and bundled
-  JetBrains Mono font choices in terminal settings.
+- Add selectable Solarized Dark and Catppuccin themes for the app and terminal, plus system,
+  Menlo, and bundled JetBrains Mono font choices in terminal settings.
 
 - Add macOS remote setup scripts with supervised Linux bridges, reconnecting SSH tunnels,
   a local gateway, and a browser page for merging saved bridge profiles.

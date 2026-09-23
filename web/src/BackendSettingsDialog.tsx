@@ -713,9 +713,9 @@ export function BackendSettingsDialog({
 
             {activeArea === "terminal" ? (
               <div className="settings-section settings-section-flat">
-                <div className="settings-label">Terminal appearance</div>
+                <div className="settings-label">Appearance</div>
                 <label className="settings-row">
-                  <span>Color theme</span>
+                  <span>App and terminal theme</span>
                   <select value={terminalTheme} onChange={(event) => onTerminalTheme(event.target.value as TerminalTheme)}>
                     <option value="catppuccin">Catppuccin Mocha</option>
                     <option value="solarized">Solarized Dark</option>
