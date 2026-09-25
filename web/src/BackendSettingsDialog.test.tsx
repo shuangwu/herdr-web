@@ -47,6 +47,22 @@ afterEach(async () => {
 });
 
 describe("BackendSettingsDialog terminal accessibility", () => {
+  it("offers opt-in blocked notifications and sound in Features", async () => {
+    const onNotifications = vi.fn();
+    const onSound = vi.fn();
+    const { container } = await render(<BackendSettingsDialog {...settingsProps()}
+      onBlockedNotificationsEnabled={onNotifications} onBlockedNotificationSound={onSound} />);
+    const tab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((button) => button.textContent?.includes("Features"));
+    expect(tab).toBeDefined();
+    await act(async () => tab!.click());
+    const notifications = requiredElement(container, '[role="group"][aria-label="Blocked agent notifications"]');
+    const sound = requiredElement(container, '[role="group"][aria-label="Blocked agent alert sound"]');
+    await act(async () => notifications.querySelectorAll("button")[1].click());
+    await act(async () => sound.querySelectorAll("button")[1].click());
+    expect(onNotifications).toHaveBeenCalledWith(true);
+    expect(onSound).toHaveBeenCalledWith(true);
+  });
   it("offers mobile refocus independently of expanding input", async () => {
     const onFocusChange = vi.fn();
     const { container } = await render(
@@ -274,6 +290,11 @@ function settingsProps() {
     onTerminalTheme: vi.fn(),
     terminalCursorBlink: false,
     onTerminalCursorBlink: vi.fn(),
+    blockedNotificationsEnabled: false,
+    onBlockedNotificationsEnabled: vi.fn(),
+    blockedNotificationSound: false,
+    onBlockedNotificationSound: vi.fn(),
+    blockedNotificationPermission: "default" as const,
     desktopCommandComposer: false,
     onDesktopCommandComposer: vi.fn(),
     desktopCommandEnterNewline: true,

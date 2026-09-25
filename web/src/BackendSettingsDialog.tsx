@@ -79,6 +79,11 @@ type Props = {
   onTerminalTheme: (value: TerminalTheme) => void;
   terminalCursorBlink: boolean;
   onTerminalCursorBlink: (enabled: boolean) => void;
+  blockedNotificationsEnabled: boolean;
+  onBlockedNotificationsEnabled: (enabled: boolean) => void;
+  blockedNotificationSound: boolean;
+  onBlockedNotificationSound: (enabled: boolean) => void;
+  blockedNotificationPermission: NotificationPermission | "unsupported";
   desktopCommandComposer: boolean;
   onDesktopCommandComposer: (enabled: boolean) => void;
   desktopCommandEnterNewline: boolean;
@@ -149,6 +154,11 @@ export function BackendSettingsDialog({
   onTerminalTheme,
   terminalCursorBlink,
   onTerminalCursorBlink,
+  blockedNotificationsEnabled,
+  onBlockedNotificationsEnabled,
+  blockedNotificationSound,
+  onBlockedNotificationSound,
+  blockedNotificationPermission,
   desktopCommandComposer,
   onDesktopCommandComposer,
   desktopCommandEnterNewline,
@@ -556,6 +566,30 @@ export function BackendSettingsDialog({
                     </button>
                   </div>
                 </div>
+                <div className="settings-label">Blocked agent alerts</div>
+                <div className="settings-row">
+                  <span>Desktop notifications</span>
+                  <div className="segmented-control" role="group" aria-label="Blocked agent notifications">
+                    <button type="button" data-on={!blockedNotificationsEnabled || blockedNotificationPermission !== "granted"}
+                      aria-pressed={!blockedNotificationsEnabled || blockedNotificationPermission !== "granted"}
+                      onClick={() => onBlockedNotificationsEnabled(false)}>Off</button>
+                    <button type="button" data-on={blockedNotificationsEnabled && blockedNotificationPermission === "granted"}
+                      aria-pressed={blockedNotificationsEnabled && blockedNotificationPermission === "granted"}
+                      disabled={blockedNotificationPermission === "unsupported" || blockedNotificationPermission === "denied"}
+                      onClick={() => onBlockedNotificationsEnabled(true)}>On</button>
+                  </div>
+                </div>
+                <div className="settings-row">
+                  <span>Alert sound</span>
+                  <div className="segmented-control" role="group" aria-label="Blocked agent alert sound">
+                    <button type="button" data-on={!blockedNotificationSound} aria-pressed={!blockedNotificationSound}
+                      onClick={() => onBlockedNotificationSound(false)}>Off</button>
+                    <button type="button" data-on={blockedNotificationSound} aria-pressed={blockedNotificationSound}
+                      onClick={() => onBlockedNotificationSound(true)}>On</button>
+                  </div>
+                </div>
+                {blockedNotificationPermission === "denied" ? <p className="settings-help">Notifications are blocked in browser settings.</p> : null}
+                {blockedNotificationPermission === "unsupported" ? <p className="settings-help">This browser does not support desktop notifications.</p> : null}
               </div>
             ) : null}
 

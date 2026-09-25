@@ -67,6 +67,8 @@ import type { AgentPinsListResponse } from "./agentPins";
 import { applyActivityMessage, parseActivityEventData, replayActivityMessages } from "./activity";
 import type { ActivityLogEntry } from "./activity";
 import { BackendSettingsDialog } from "./BackendSettingsDialog";
+import { blockedAttentionPanes, blockedPaneKey, diffBlockedPaneStatuses } from "./blockedAttention";
+import { armBlockedAlertSound, claimBlockedAlertAcrossTabs, clearBlockedAlertClaim, playBlockedAlertSound } from "./blockedNotifications";
 import { useBridge } from "./bridge";
 import type { BridgeId, BridgeRuntime } from "./bridge";
 import { createCommands, createdPaneId } from "./commands";
@@ -434,6 +436,8 @@ type DisplayPrefs = {
   terminalFont: TerminalFont;
   terminalTheme: TerminalTheme;
   terminalCursorBlink: boolean;
+  blockedNotificationsEnabled: boolean;
+  blockedNotificationSound: boolean;
   desktopCommandComposer: boolean;
   desktopCommandEnterNewline: boolean;
   terminalScreenReaderText: boolean;
@@ -505,6 +509,8 @@ function readDisplayPrefs(): DisplayPrefs {
     terminalFont: DEFAULT_TERMINAL_FONT,
     terminalTheme: DEFAULT_TERMINAL_THEME,
     terminalCursorBlink: defaultTerminalCursorBlink(),
+    blockedNotificationsEnabled: false,
+    blockedNotificationSound: false,
     desktopCommandComposer: DEFAULT_DESKTOP_COMMAND_COMPOSER,
     desktopCommandEnterNewline: DEFAULT_DESKTOP_COMMAND_ENTER_NEWLINE,
     terminalScreenReaderText: DEFAULT_TERMINAL_SCREEN_READER_TEXT,
@@ -711,6 +717,10 @@ function parseDisplayPrefsValue(
       parsed.terminalCursorBlink,
       fallback.terminalCursorBlink,
     ),
+    blockedNotificationsEnabled: typeof parsed.blockedNotificationsEnabled === "boolean"
+      ? parsed.blockedNotificationsEnabled : fallback.blockedNotificationsEnabled,
+    blockedNotificationSound: typeof parsed.blockedNotificationSound === "boolean"
+      ? parsed.blockedNotificationSound : fallback.blockedNotificationSound,
     desktopCommandComposer: parseDesktopCommandComposer(
       parsed.desktopCommandComposer,
       fallback.desktopCommandComposer,
@@ -1119,6 +1129,25 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
   const [terminalCursorBlink, setTerminalCursorBlink] = useState(
     initialPrefs.terminalCursorBlink,
   );
+  const [blockedNotificationsEnabled, setBlockedNotificationsEnabled] = useState(
+    initialPrefs.blockedNotificationsEnabled,
+  );
+  const [blockedNotificationSound, setBlockedNotificationSound] = useState(
+    initialPrefs.blockedNotificationSound,
+  );
+  const [blockedNotificationPermission, setBlockedNotificationPermission] = useState<NotificationPermission | "unsupported">(
+    () => typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+  );
+  useEffect(() => {
+    if (!blockedNotificationSound) return;
+    const arm = () => armBlockedAlertSound();
+    window.addEventListener("pointerdown", arm, { once: true });
+    window.addEventListener("keydown", arm, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", arm);
+      window.removeEventListener("keydown", arm);
+    };
+  }, [blockedNotificationSound]);
   const [desktopCommandComposer, setDesktopCommandComposer] = useState(
     initialPrefs.desktopCommandComposer,
   );
@@ -1178,6 +1207,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
   const isTouchInput = useIsTouchInput();
   const showMobileKeyboardHideRefit = isNativeAndroid();
   const connectionRefs = useRef<Record<string, BridgeConnectionRef>>({});
+  const blockedStatusesRef = useRef(new Map<string, Map<string, AgentStatus>>());
+  const notificationNavigateRef = useRef<(bridgeId: string, paneId: string) => void>(() => {});
   const isCompactLayoutRef = useRef(isCompactLayout);
   const showDetailRef = useRef(showDetail);
   const selectedBridgeIdRef = useRef(selectedBridgeId);
@@ -1264,6 +1295,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       setTerminalFont(prefs.terminalFont);
       setTerminalTheme(prefs.terminalTheme);
       setTerminalCursorBlink(prefs.terminalCursorBlink);
+      setBlockedNotificationsEnabled(prefs.blockedNotificationsEnabled);
+      setBlockedNotificationSound(prefs.blockedNotificationSound);
       setDesktopCommandComposer(prefs.desktopCommandComposer);
       setDesktopCommandEnterNewline(prefs.desktopCommandEnterNewline);
       setTerminalScreenReaderText(prefs.terminalScreenReaderText);
@@ -1371,6 +1404,14 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       }),
     [bridge.enabledRuntimes, connectionStates],
   );
+  const needsAttention = useMemo(() => blockedAttentionPanes(bridgeViews.flatMap((view) =>
+    view.snapshot ? [{
+      bridgeId: view.runtime.id,
+      bridgeLabel: view.runtime.label,
+      panes: view.snapshot.panes,
+      workspaces: view.snapshot.workspaces,
+    }] : [],
+  )), [bridgeViews]);
   useEffect(() => {
     for (const { runtime, snapshot, loadState } of bridgeViews) {
       if (runtime.canConnect && loadState === "ready" && snapshot) {
@@ -1822,6 +1863,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       terminalFont,
       terminalTheme,
       terminalCursorBlink,
+      blockedNotificationsEnabled,
+      blockedNotificationSound,
       desktopCommandComposer,
       desktopCommandEnterNewline,
       terminalScreenReaderText,
@@ -1865,6 +1908,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     terminalFont,
     terminalTheme,
     terminalCursorBlink,
+    blockedNotificationsEnabled,
+    blockedNotificationSound,
     desktopCommandComposer,
     desktopCommandEnterNewline,
     terminalScreenReaderText,
@@ -2534,6 +2579,49 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     openPane(bridgeId, pane);
     requestTerminalFocus();
   };
+
+  notificationNavigateRef.current = (bridgeId, paneId) => {
+    const pane = snapshotForBridge(bridgeId)?.panes.find((candidate) => candidate.pane_id === paneId);
+    if (pane) focusPane(bridgeId, pane);
+  };
+
+  useEffect(() => {
+    for (const view of bridgeViews) {
+      if (!view.snapshot) continue;
+      const bridgeId = view.runtime.id;
+      const previous = blockedStatusesRef.current.get(bridgeId) ?? null;
+      const { current, entered, cleared } = diffBlockedPaneStatuses(previous, bridgeId, view.snapshot.panes);
+      blockedStatusesRef.current.set(bridgeId, current);
+      for (const paneKey of cleared) clearBlockedAlertClaim(paneKey);
+      if (!blockedNotificationsEnabled || blockedNotificationPermission !== "granted" || !view.runtime.canConnect) continue;
+      for (const pane of entered) {
+        const paneKey = blockedPaneKey(bridgeId, pane);
+        const workspaceLabel = view.snapshot.workspaces.find((workspace) => workspace.workspace_id === pane.workspace_id)?.label || "Workspace";
+        void claimBlockedAlertAcrossTabs(paneKey).then((claimed) => {
+          if (!claimed || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+          if (connectionRefs.current[bridgeId]?.snapshot?.panes.find((candidate) => candidate.pane_id === pane.pane_id)?.agent_status !== "blocked") {
+            clearBlockedAlertClaim(paneKey);
+            return;
+          }
+          try {
+            const notification = new Notification(`${paneTitle(pane)} needs attention`, {
+              body: `${view.runtime.label} · ${workspaceLabel}`,
+              tag: paneKey,
+              silent: true,
+            });
+            notification.onclick = () => {
+              window.focus();
+              notificationNavigateRef.current(bridgeId, pane.pane_id);
+              notification.close();
+            };
+            if (blockedNotificationSound) playBlockedAlertSound();
+          } catch {
+            clearBlockedAlertClaim(paneKey);
+          }
+        });
+      }
+    }
+  }, [bridgeViews, blockedNotificationsEnabled, blockedNotificationPermission, blockedNotificationSound]);
 
   const selectNote = (bridgeId: BridgeId, noteId: string) => {
     if (!notesEnabled) {
@@ -3970,6 +4058,20 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             setMenu({ kind, bridgeId, id, label, x, y, clearable, pinLabel })
           }
         />
+        {needsAttention.length > 0 ? (
+          <section className="needs-attention" aria-label="Needs attention">
+            <div className="needs-attention-heading">Needs attention <span>{needsAttention.length}</span></div>
+            <div className="needs-attention-list">
+              {needsAttention.map((entry) => (
+                <button key={blockedPaneKey(entry.bridgeId, entry.pane)} type="button"
+                  className="needs-attention-item" onClick={() => focusPane(entry.bridgeId, entry.pane)}>
+                  <span className="needs-attention-name">{paneTitle(entry.pane)}</span>
+                  <span className="needs-attention-location">{entry.bridgeLabel} · {entry.workspaceLabel}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <div
           className="sidebar-resizer"
           role="separator"
@@ -4467,6 +4569,27 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           onTerminalTheme={setTerminalTheme}
           terminalCursorBlink={terminalCursorBlink}
           onTerminalCursorBlink={setTerminalCursorBlink}
+          blockedNotificationsEnabled={blockedNotificationsEnabled}
+          onBlockedNotificationsEnabled={(enabled) => {
+            if (!enabled) {
+              setBlockedNotificationsEnabled(false);
+              return;
+            }
+            if (typeof Notification === "undefined") {
+              setBlockedNotificationPermission("unsupported");
+              return;
+            }
+            void Notification.requestPermission().then((permission) => {
+              setBlockedNotificationPermission(permission);
+              setBlockedNotificationsEnabled(permission === "granted");
+            }).catch(() => setBlockedNotificationPermission("denied"));
+          }}
+          blockedNotificationSound={blockedNotificationSound}
+          onBlockedNotificationSound={(enabled) => {
+            setBlockedNotificationSound(enabled);
+            if (enabled) armBlockedAlertSound();
+          }}
+          blockedNotificationPermission={blockedNotificationPermission}
           desktopCommandComposer={desktopCommandComposer}
           onDesktopCommandComposer={setDesktopCommandComposer}
           desktopCommandEnterNewline={desktopCommandEnterNewline}

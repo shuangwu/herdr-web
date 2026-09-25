@@ -6,6 +6,9 @@
 
 ### Added
 
+- Alert on new blocked-agent transitions when desktop notifications are enabled, with optional
+  sound, cross-tab deduplication, click-through to the pane, and a persistent Needs attention list.
+
 - Add selectable Solarized Dark and Catppuccin themes for the app and terminal, plus system,
   Menlo, and bundled JetBrains Mono font choices in terminal settings.
 

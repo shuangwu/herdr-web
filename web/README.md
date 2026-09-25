@@ -15,6 +15,12 @@ npm run build
 The production build is written to `web/dist/` and served by `herdr-web-bridge` through
 `scripts/run-bridge.sh`.
 
+Blocked agents stay in the sidebar's Needs attention list until their status clears. To receive
+desktop alerts while Herdr Web is open, enable Desktop notifications under Settings → Features;
+the browser will ask for permission. Alert sound is a separate setting. Notifications are
+deduplicated across tabs on the same origin and open the matching host and pane when clicked.
+The app does not receive alerts after every tab or installed-app window is closed.
+
 For the normal one-command development workflow, start the bridge and Vite from the repository root:
 
 ```bash

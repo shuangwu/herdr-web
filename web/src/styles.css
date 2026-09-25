@@ -198,6 +198,12 @@ button {
   font: inherit;
 }
 
+.settings-help {
+  margin: 0 0 12px;
+  color: var(--subtext0);
+  font-size: 12px;
+}
+
 .app[data-resizing-sidebar="true"],
 .app[data-resizing-notes="true"],
 .app[data-resizing-notes-list="true"] {
@@ -235,6 +241,60 @@ button {
   overflow: hidden;
   border-right: 1px solid var(--line);
   background: var(--sidebar-bg);
+}
+
+.needs-attention {
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  background: var(--mantle);
+}
+
+.needs-attention-heading {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.needs-attention-list {
+  max-height: min(28vh, 220px);
+  overflow-y: auto;
+}
+
+.needs-attention-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+}
+
+.needs-attention-item:hover,
+.needs-attention-item:focus-visible {
+  background: var(--row-hover);
+}
+
+.needs-attention-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.needs-attention-location {
+  overflow: hidden;
+  color: var(--subtext0);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-resizer {
