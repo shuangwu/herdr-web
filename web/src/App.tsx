@@ -1404,6 +1404,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       }),
     [bridge.enabledRuntimes, connectionStates],
   );
+  const numberedTabEntries = useMemo(() => buildNumberedTabEntries(bridgeViews), [bridgeViews]);
   const needsAttention = useMemo(() => blockedAttentionPanes(bridgeViews.flatMap((view) =>
     view.snapshot ? [{
       bridgeId: view.runtime.id,
@@ -3061,6 +3062,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const navigationShortcut = isAppNavigationShortcut(event);
+      const numberedTab = numberedTabShortcut(event);
       const closeTabShortcut = isCloseTabShortcut(event);
       const newTabShortcut = isNewTabShortcut(event);
       const splitDirection = splitSupported ? splitShortcutDirection(event) : null;
@@ -3071,6 +3073,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       const paneCycleStep = paneCycleShortcutStep(event);
       if (
         (!navigationShortcut &&
+          numberedTab === null &&
           !closeTabShortcut &&
           !newTabShortcut &&
           !splitDirection &&
@@ -3083,6 +3086,15 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
         launchTarget ||
         hasOpenModal()
       ) {
+        return;
+      }
+
+      if (numberedTab !== null) {
+        const target = numberedTabEntries[numberedTab - 1];
+        if (!target) return;
+        event.preventDefault();
+        event.stopPropagation();
+        focusTab(target.bridgeId, target.tab.tab_id);
         return;
       }
 
@@ -3330,6 +3342,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     menu,
     multiHostSpaceSelection,
     navigationIsShared,
+    numberedTabEntries,
     paneFocusSupported,
     pinnedAgentKeys,
     scope,
@@ -4140,6 +4153,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
 
       <section className="stage" aria-label="Terminal">
         <TabBar
+          bridgeId={selectedRuntime?.id ?? null}
+          numberedTabs={numberedTabEntries}
           snapshot={snapshot}
           activeSpace={activeSpace}
           selectedPane={selectedPane}
@@ -5504,6 +5519,20 @@ export function buildVisibleTabEntries(
   return spaceGroups.flatMap(flattenGroup);
 }
 
+export function buildNumberedTabEntries(bridgeViews: BridgeConnectionView[]) {
+  return bridgeViews.flatMap((view) => {
+    const snapshot = view.snapshot;
+    if (!snapshot) return [];
+    return [...snapshot.workspaces]
+      .sort((a, b) => a.number - b.number)
+      .flatMap((workspace) =>
+        sortTabsForWorkspace(snapshot.tabs, workspace.workspace_id)
+          .filter((tab) => snapshot.panes.some((pane) => pane.tab_id === tab.tab_id))
+          .map((tab) => ({ bridgeId: view.runtime.id, workspace, tab })),
+      );
+  });
+}
+
 export function sortScopedTabEntriesByAgents(
   entries: ScopedTabEntry[],
   agentSort: AgentSort,
@@ -5972,6 +6001,12 @@ function isAppNavigationShortcut(event: KeyboardEvent) {
   );
 }
 
+export function numberedTabShortcut(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "shiftKey" | "code">) {
+  if (!event.metaKey || event.ctrlKey || event.shiftKey) return null;
+  const match = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
+  return match ? Number(match[1]) : null;
+}
+
 function isCloseTabShortcut(event: KeyboardEvent) {
   return (
     isPlatformShortcutModifier(event) &&
@@ -6176,6 +6211,8 @@ function SplitGrid({
 }
 
 function TabBar({
+  bridgeId,
+  numberedTabs,
   snapshot,
   activeSpace,
   selectedPane,
@@ -6183,6 +6220,8 @@ function TabBar({
   onCreateTab,
   onMenu,
 }: {
+  bridgeId: BridgeId | null;
+  numberedTabs: ReturnType<typeof buildNumberedTabEntries>;
   snapshot: Snapshot | null;
   activeSpace: WorkspaceInfo | null;
   selectedPane: PaneInfo | null;
@@ -6213,6 +6252,10 @@ function TabBar({
       <div className="tabbar-scroll" role="tablist" aria-label="Tabs">
         {tabs.map((tab) => {
           const label = displayTabLabel(tab, snapshot.panes);
+          const numberedIndex = numberedTabs.findIndex(
+            (entry) => entry.bridgeId === bridgeId && entry.tab.tab_id === tab.tab_id,
+          );
+          const shortcutNumber = numberedIndex >= 0 && numberedIndex < 9 ? numberedIndex + 1 : null;
           return (
             <button
               key={tab.tab_id}
@@ -6220,6 +6263,8 @@ function TabBar({
               className="tabbar-tab"
               role="tab"
               aria-selected={tab.tab_id === activeTabId}
+              aria-keyshortcuts={shortcutNumber ? `Meta+${shortcutNumber}` : undefined}
+              title={shortcutNumber ? `${label} · Cmd+${shortcutNumber}` : label}
               data-active={tab.tab_id === activeTabId}
               onClick={() => onSelectTab(tab.tab_id)}
               onContextMenu={(event) => {
@@ -6239,6 +6284,7 @@ function TabBar({
             >
               <span className="dot" data-status={tab.agent_status} />
               <span className="tabbar-name">{label}</span>
+              {shortcutNumber ? <span className="tabbar-number mono" aria-hidden="true">{shortcutNumber}</span> : null}
             </button>
           );
         })}
