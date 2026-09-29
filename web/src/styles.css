@@ -837,6 +837,20 @@ button {
   white-space: nowrap;
 }
 
+.sidebar-tab-shortcut {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 5px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .tab-split {
   display: inline-flex;
   align-items: center;

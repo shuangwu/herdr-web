@@ -387,7 +387,8 @@ work when the terminal's hidden keyboard input has focus. OS-reserved shortcuts 
 
 Numbered tabs follow enabled host order, then workspace number, then tab number. They ignore the
 sidebar's current host, workspace, sort, and collapse filters. `Cmd+Option+1` … `Cmd+Option+9`
-also work when a browser reserves `Cmd+number` for its own tab switching.
+also work when a browser reserves `Cmd+number` for its own tab switching. Hold `Cmd` to show
+shortcut numbers beside visible tabs in the sidebar's Tabs view.
 
 ## Runtime Model
 

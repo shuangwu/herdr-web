@@ -3994,6 +3994,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       >
         <Switcher
           bridgeViews={bridgeViews}
+          numberedTabs={numberedTabEntries}
           selectedBridgeId={selectedRuntime?.id ?? null}
           hostScope={hostScope}
           snapshot={snapshot}
@@ -6307,6 +6308,7 @@ function TabBar({
 
 function Switcher({
   bridgeViews,
+  numberedTabs,
   selectedBridgeId,
   hostScope,
   snapshot,
@@ -6365,6 +6367,7 @@ function Switcher({
   onScopedMenu,
 }: {
   bridgeViews: BridgeConnectionView[];
+  numberedTabs: ReturnType<typeof buildNumberedTabEntries>;
   selectedBridgeId: BridgeId | null;
   hostScope: HostScope;
   snapshot: Snapshot | null;
@@ -6436,6 +6439,33 @@ function Switcher({
     pinLabel?: "agent" | "pane",
   ) => void;
 }) {
+  const [commandHeld, setCommandHeld] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Meta" || event.metaKey) setCommandHeld(true);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Meta" || !event.metaKey) setCommandHeld(false);
+    };
+    const clear = () => setCommandHeld(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clear);
+    document.addEventListener("visibilitychange", clear);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clear);
+      document.removeEventListener("visibilitychange", clear);
+    };
+  }, []);
+  const shortcutNumberForTab = (bridgeId: BridgeId, tabId: string) => {
+    if (!commandHeld) return null;
+    const index = numberedTabs.findIndex(
+      (entry) => entry.bridgeId === bridgeId && entry.tab.tab_id === tabId,
+    );
+    return index >= 0 && index < 9 ? index + 1 : null;
+  };
   const [optionsMenu, setOptionsMenu] = useState<{ x: number; y: number } | null>(null);
   const [spaceOptionsMenu, setSpaceOptionsMenu] = useState<{ x: number; y: number } | null>(null);
   const [spaceDragTarget, setSpaceDragTarget] = useState<string | null | undefined>(undefined);
@@ -6945,13 +6975,19 @@ function Switcher({
       ? null
       : group.tabs.map(({ tab, panes: tabPanes }) => {
           const tabLabel = displayTabLabel(tab, group.snapshot.panes);
+          const shortcutNumber = shortcutNumberForTab(group.bridgeId, tab.tab_id);
+          const showTabDivider = shouldShowTabDivider(
+            agentGroup,
+            group.workspace.tab_count,
+            tabPanes.length,
+          );
           const rowContext = sidebarRowContext(
             agentGroup,
             hostScope,
             group.bridgeLabel,
             group.workspace.label,
           );
-          const paneRows = tabPanes.map((pane) => {
+          const paneRows = tabPanes.map((pane, tabPaneIndex) => {
             const index = paneIndex++;
             const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
             const renderAsAgent = shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs);
@@ -6980,6 +7016,7 @@ function Switcher({
                   bridgeLabel={rowContext.bridgeLabel}
                   pinned={pinned}
                   active={active}
+                  shortcutNumber={!showTabDivider && tabPaneIndex === 0 ? shortcutNumber : null}
                   onSelect={onSelect}
                   onMenu={onPaneMenu}
                 />
@@ -6997,6 +7034,7 @@ function Switcher({
                 bridgeLabel={rowContext.bridgeLabel}
                 pinned={pinned}
                 active={active}
+                shortcutNumber={!showTabDivider && tabPaneIndex === 0 ? shortcutNumber : null}
                 onSelect={onSelect}
                 onMenu={onPaneMenu}
               />
@@ -7007,10 +7045,11 @@ function Switcher({
           }
           return (
             <div className="tabgrp" key={`${group.bridgeId}:${tab.tab_id}`}>
-              {shouldShowTabDivider(agentGroup, group.workspace.tab_count, tabPanes.length) ? (
+              {showTabDivider ? (
                 <TabDivider
                   label={tabLabel}
                   count={tabPanes.length}
+                  shortcutNumber={shortcutNumber}
                   onSelect={() => onSelectTab(group.bridgeId, tab.tab_id)}
                   onMenu={(x, y) =>
                     onScopedMenu(
@@ -9163,11 +9202,13 @@ function SpaceRow({
 function TabDivider({
   label,
   count,
+  shortcutNumber,
   onSelect,
   onMenu,
 }: {
   label: string;
   count: number;
+  shortcutNumber: number | null;
   onSelect: () => void;
   onMenu: (x: number, y: number) => void;
 }) {
@@ -9175,6 +9216,7 @@ function TabDivider({
   return (
     <div className="tab-div">
       <button type="button" className="tab-head" {...press}>
+        {shortcutNumber ? <ShortcutBadge number={shortcutNumber} /> : null}
         <span className="tab-name">{label}</span>
         {count > 1 ? (
           <span className="tab-split mono">
@@ -9188,6 +9230,10 @@ function TabDivider({
   );
 }
 
+function ShortcutBadge({ number }: { number: number }) {
+  return <span className="sidebar-tab-shortcut mono" aria-hidden="true">{number}</span>;
+}
+
 function PaneRow({
   pane,
   workspaceLabel,
@@ -9195,6 +9241,7 @@ function PaneRow({
   bridgeLabel,
   pinned,
   active,
+  shortcutNumber,
   index,
   onSelect,
   onMenu,
@@ -9205,6 +9252,7 @@ function PaneRow({
   bridgeLabel?: string;
   pinned?: boolean;
   active: boolean;
+  shortcutNumber?: number | null;
   index: number;
   onSelect: () => void;
   onMenu: (x: number, y: number) => void;
@@ -9226,6 +9274,7 @@ function PaneRow({
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
         <span className="pane-name pane-title">
+          {shortcutNumber ? <ShortcutBadge number={shortcutNumber} /> : null}
           <span className="pane-title-text">{paneTitle(pane)}</span>
         </span>
         {meta ? <span className="pane-meta mono">{meta}</span> : null}
@@ -9249,6 +9298,7 @@ function AgentRow({
   bridgeLabel,
   pinned,
   active,
+  shortcutNumber,
   index,
   onSelect,
   onMenu,
@@ -9259,6 +9309,7 @@ function AgentRow({
   bridgeLabel?: string;
   pinned: boolean;
   active: boolean;
+  shortcutNumber?: number | null;
   index: number;
   onSelect: () => void;
   onMenu: (x: number, y: number) => void;
@@ -9277,6 +9328,7 @@ function AgentRow({
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
         <span className="pane-name pane-title">
+          {shortcutNumber ? <ShortcutBadge number={shortcutNumber} /> : null}
           {iconKind ? <AgentIcon kind={iconKind} /> : null}
           {pinned ? (
             <Pin className="agent-pin-indicator" size={10} aria-label="Pinned" />

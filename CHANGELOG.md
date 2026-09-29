@@ -7,7 +7,8 @@
 ### Added
 
 - Add Cmd+1–9 shortcuts to select tabs across all hosts in host, workspace, and tab order,
-  with Cmd+Option+number as a fallback when the browser reserves numbered tab keys.
+  with Cmd+Option+number as a fallback when the browser reserves numbered tab keys. Holding Cmd
+  reveals the shortcut numbers beside visible sidebar tabs.
 
 - Alert on new blocked-agent transitions when desktop notifications are enabled, with optional
   sound, cross-tab deduplication, click-through to the pane, and a persistent Needs attention list.
