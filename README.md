@@ -369,11 +369,16 @@ HOST=0.0.0.0 scripts/run-bridge.sh --allow-host host-b --allow-origin http://hos
 ## Keyboard Shortcuts
 
 These app shortcuts are ignored while dialogs, menus, and normal text inputs are active. They still
-work when the terminal's hidden keyboard input has focus. OS-reserved shortcuts such as `Cmd+Tab`,
-`Meta+Tab`, or some `Alt+Tab` setups may not reach the browser.
+work when the terminal's hidden keyboard input has focus. Browser- or OS-reserved shortcuts,
+including `Cmd+Tab` and sometimes `Cmd+N`, `Cmd+T`, or `Cmd+W`, may not reach the app. The shifted
+new-tab and close bindings remain available; `Cmd/Option+Shift+-` splits right directly.
 
 | Action | macOS | Windows/Linux |
 | --- | --- | --- |
+| Open command palette / shortcut help | `Cmd+K` / `Cmd+/` | `Meta+K` / `Meta+/` |
+| Create a tab in the active Space | `Cmd+N` or `Cmd/Option+Shift+T` | `Meta+N` or `Meta/Alt+Shift+T` |
+| Create a pane split to the right | `Cmd+T` | `Meta+T` |
+| Confirm close for the selected pane, or its tab when it is the last pane | `Cmd+W` or `Cmd/Option+Shift+X` | `Meta+W` or `Meta/Alt+Shift+X` |
 | Select previous/next agent pane | `Cmd/Option+Shift+Up/Down` | `Meta/Alt+Shift+Up/Down` |
 | Select previous/next tab in the active space | `Cmd/Option+Shift+Left/Right` | `Meta/Alt+Shift+Left/Right` |
 | Select global tab 1–9 across hosts | `Cmd+1` … `Cmd+9` | `Meta+1` … `Meta+9` |
@@ -382,8 +387,10 @@ work when the terminal's hidden keyboard input has focus. OS-reserved shortcuts 
 | Cycle split previous | `Cmd/Option+Shift+Tab` | `Meta/Alt+Shift+Tab` |
 | Split selected pane down | `Cmd/Option+Shift+V` | `Meta/Alt+Shift+V` |
 | Split selected pane right | `Cmd/Option+Shift+-` | `Meta/Alt+Shift+-` |
-| Open the new-tab launch modal | `Cmd/Option+Shift+T` | `Meta/Alt+Shift+T` |
-| Confirm close for the focused split, or tab when only one split exists | `Cmd/Option+Shift+X` | `Meta/Alt+Shift+X` |
+
+The new-tab and new-pane shortcuts open the launcher so you can choose a shell or agent preset.
+Within the sidebar, use Up/Down to move between rows, Enter to select, Shift+F10 or the Menu key
+for row actions, and Escape to return to the terminal. Dialogs and menus support Tab and Escape.
 
 Numbered tabs follow enabled host order, then workspace number, then tab number. They ignore the
 sidebar's current host, workspace, sort, and collapse filters. `Cmd+Option+1` … `Cmd+Option+9`

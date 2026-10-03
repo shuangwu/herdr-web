@@ -6,6 +6,9 @@
 
 ### Added
 
+- Add Cmd+N for a new tab, Cmd+T for a new pane split to the right, and Cmd+W to close the
+  selected pane (or its tab when it is the last pane); retain the earlier shifted shortcuts.
+
 - Add a loopback-only Machines dialog for remote health, SSH-agent diagnosis, logs, browser-profile
   setup, tunnel and bridge repair, and saved-machine management. Include read-only Herdr session,
   integration, configuration, and version diagnostics.

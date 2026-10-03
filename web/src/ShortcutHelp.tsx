@@ -12,8 +12,9 @@ const shortcuts = [
   ["Move through agents", "⌘⇧↑ / ↓"],
   ["Move between panes", "⌘H / J / K / L"],
   ["Cycle panes in a tab", "⌘Tab / ⌘⇧Tab"],
-  ["New tab", "⌘⇧T"],
-  ["Close tab or pane", "⌘⇧X"],
+  ["New tab", "⌘N · ⌘⇧T"],
+  ["New pane (split right)", "⌘T"],
+  ["Close pane, or tab if last", "⌘W · ⌘⇧X"],
   ["Split pane right / down", "⌘⇧- / ⌘⇧V"],
 ];
 
@@ -24,8 +25,9 @@ export const shortcutPeek = [
   ["Previous/next tab", "⌘⇧←/→"],
   ["Previous/next agent", "⌘⇧↑/↓"],
   ["Focus pane", "⌘H/J/K/L"],
-  ["New tab", "⌘⇧T"],
-  ["Close tab or pane", "⌘⇧X"],
+  ["New tab", "⌘N"],
+  ["New pane", "⌘T"],
+  ["Close pane/tab", "⌘W"],
   ["Split right/down", "⌘⇧-/V"],
 ] as const;
 

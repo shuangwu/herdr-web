@@ -15,6 +15,9 @@ import {
   closeCopy,
   filterCollapsedAgentPaneEntries,
   filterCollapsedTabEntries,
+  isClosePaneShortcut,
+  isNewPaneShortcut,
+  isNewTabShortcut,
   mergeCreatedPaneNoteList,
   mergePendingPaneNotesIntoList,
   noteDraftStorageKey,
@@ -1333,6 +1336,19 @@ describe("App multi-bridge helpers", () => {
     expect(numberedTabShortcut({ ...event, shiftKey: true })).toBeNull();
     expect(numberedTabShortcut({ ...event, metaKey: false })).toBeNull();
     expect(numberedTabShortcut({ ...event, code: "Digit0" })).toBeNull();
+  });
+
+  it("maps plain Command N, T, and W without stealing Option typing or shifted chords", () => {
+    const event = { metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, repeat: false, code: "KeyN" } as KeyboardEvent;
+    expect(isNewTabShortcut(event)).toBe(true);
+    expect(isNewPaneShortcut({ ...event, code: "KeyT" })).toBe(true);
+    expect(isClosePaneShortcut({ ...event, code: "KeyW" })).toBe(true);
+    expect(isNewTabShortcut({ ...event, code: "KeyT" })).toBe(false);
+    expect(isNewPaneShortcut({ ...event, code: "KeyN" })).toBe(false);
+    for (const altered of [{ altKey: true }, { shiftKey: true }, { ctrlKey: true }, { repeat: true }, { metaKey: false }]) {
+      expect(isNewPaneShortcut({ ...event, code: "KeyT", ...altered })).toBe(false);
+      expect(isClosePaneShortcut({ ...event, code: "KeyW", ...altered })).toBe(false);
+    }
   });
 
   it("sorts agent tabs first by attention while keeping plain tabs stable at the bottom", () => {

@@ -3097,8 +3097,9 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     const onKeyDown = (event: KeyboardEvent) => {
       const navigationShortcut = isAppNavigationShortcut(event);
       const numberedTab = numberedTabShortcut(event);
-      const closeTabShortcut = isCloseTabShortcut(event);
+      const closePaneShortcut = isClosePaneShortcut(event);
       const newTabShortcut = isNewTabShortcut(event);
+      const newPaneShortcut = splitSupported && isNewPaneShortcut(event);
       const splitDirection = splitSupported ? splitShortcutDirection(event) : null;
       const paneFocusDirection =
         paneFocusSupported || !navigationIsShared
@@ -3108,8 +3109,9 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       if (
         (!navigationShortcut &&
           numberedTab === null &&
-          !closeTabShortcut &&
+          !closePaneShortcut &&
           !newTabShortcut &&
+          !newPaneShortcut &&
           !splitDirection &&
           !paneFocusDirection &&
           paneCycleStep === 0) ||
@@ -3190,6 +3192,14 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
         return;
       }
 
+      if (newPaneShortcut) {
+        if (!selectedPane || !selectedRuntime) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setLaunchTarget({ mode: "split", pane: selectedPane, direction: "right", bridgeId: selectedRuntime.id });
+        return;
+      }
+
       if (splitDirection) {
         if (!selectedPane || !selectedCommands) {
           return;
@@ -3223,7 +3233,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
         return;
       }
 
-      if (closeTabShortcut) {
+      if (closePaneShortcut) {
         if (!snapshot || !selectedRuntime) {
           return;
         }
@@ -4372,7 +4382,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
                 className="icon-btn"
                 type="button"
                 aria-label="Split right"
-                title="Split right"
+                title="Split right (⌘T)"
                 disabled={busy}
                 onClick={(event) => {
                   focusOverlayTrigger(event.currentTarget);
@@ -6199,16 +6209,22 @@ export function numberedTabShortcut(event: Pick<KeyboardEvent, "metaKey" | "ctrl
   return match ? Number(match[1]) : null;
 }
 
-function isCloseTabShortcut(event: KeyboardEvent) {
-  return (
-    isPlatformShortcutModifier(event) &&
-    event.shiftKey &&
-    event.code === "KeyX"
-  );
+export function isClosePaneShortcut(event: KeyboardEvent) {
+  return isExactCommandChord(event, "KeyW") ||
+    (isPlatformShortcutModifier(event) && event.shiftKey && event.code === "KeyX");
 }
 
-function isNewTabShortcut(event: KeyboardEvent) {
-  return isPlatformShortcutModifier(event) && event.shiftKey && event.code === "KeyT";
+export function isNewTabShortcut(event: KeyboardEvent) {
+  return isExactCommandChord(event, "KeyN") ||
+    (isPlatformShortcutModifier(event) && event.shiftKey && event.code === "KeyT");
+}
+
+export function isNewPaneShortcut(event: KeyboardEvent) {
+  return isExactCommandChord(event, "KeyT");
+}
+
+function isExactCommandChord(event: KeyboardEvent, code: string) {
+  return event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.repeat && event.code === code;
 }
 
 function paneFocusShortcutDirection(event: KeyboardEvent): PaneFocusDirection | null {
@@ -6485,7 +6501,7 @@ function TabBar({
         className="tabbar-add"
         type="button"
         aria-label="New tab"
-        title="New tab"
+        title="New tab (⌘N)"
         onClick={(event) => {
           focusOverlayTrigger(event.currentTarget);
           onCreateTab(activeSpace.workspace_id);
@@ -7980,7 +7996,7 @@ function Switcher({
                     className="sec-add"
                     type="button"
                     aria-label="New tab"
-                    title="New tab"
+                    title="New tab (⌘N)"
                     onClick={(event) => {
                       focusOverlayTrigger(event.currentTarget);
                       if (selectedBridgeId && activeSpace) {
