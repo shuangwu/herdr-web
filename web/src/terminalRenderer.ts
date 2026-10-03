@@ -486,8 +486,11 @@ export class GhosttyRenderer implements TerminalRenderer {
     this.#mouseCleanup?.();
     const terminal = this.#requireTerminal();
     const container = this.#container;
+    // The Ghostty canvas treats its rightmost pixels as a scrollbar. Listen on
+    // the parent capture phase so terminal apps receive clicks in that strip.
+    const eventRoot = container?.parentElement;
     const canvas = terminal.renderer?.getCanvas();
-    if (!container || !canvas) return;
+    if (!eventRoot || !canvas) return;
     let pressedButton: number | null = null;
     let lastMoveCell = "";
     const onCanvas = (event: Event) => event.target === canvas;
@@ -543,16 +546,16 @@ export class GhosttyRenderer implements TerminalRenderer {
     const onContextMenu = (event: MouseEvent) => {
       if (onCanvas(event) && tracking()) consume(event);
     };
-    container.addEventListener("mousedown", onMouseDown, true);
-    container.addEventListener("mousemove", onMouseMove, true);
-    container.addEventListener("wheel", onWheel, { capture: true, passive: false });
-    container.addEventListener("contextmenu", onContextMenu, true);
+    eventRoot.addEventListener("mousedown", onMouseDown, true);
+    eventRoot.addEventListener("mousemove", onMouseMove, true);
+    eventRoot.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    eventRoot.addEventListener("contextmenu", onContextMenu, true);
     this.#mouseCleanup = () => {
       document.removeEventListener("mouseup", onMouseUp, true);
-      container.removeEventListener("mousedown", onMouseDown, true);
-      container.removeEventListener("mousemove", onMouseMove, true);
-      container.removeEventListener("wheel", onWheel, true);
-      container.removeEventListener("contextmenu", onContextMenu, true);
+      eventRoot.removeEventListener("mousedown", onMouseDown, true);
+      eventRoot.removeEventListener("mousemove", onMouseMove, true);
+      eventRoot.removeEventListener("wheel", onWheel, true);
+      eventRoot.removeEventListener("contextmenu", onContextMenu, true);
     };
   }
 
