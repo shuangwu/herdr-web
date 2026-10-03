@@ -52,6 +52,8 @@ def healthy():
 
 
 existing = bridges()
+if existing and config.get("source") and not config["force"]:
+    raise SystemExit("A bridge is already running; use --force --source to replace it with the committed source build.")
 if existing and not config["force"]:
     for pid in existing:
         proc = Path(f"/proc/{pid}")
@@ -85,8 +87,8 @@ with tarfile.open(archive, "r:gz") as tar:
     staged.write_bytes(tar.extractfile(member).read())
 staged.chmod(0o755)
 binary_check = run(str(staged), "--help", check=False)
-if binary_check.returncode:
-    if "GLIBC_" not in binary_check.stderr:
+if config.get("source") or binary_check.returncode:
+    if not config.get("source") and "GLIBC_" not in binary_check.stderr:
         raise SystemExit(binary_check.stderr)
     print("Published binary needs newer glibc; building the checked-out source with an isolated Rust toolchain.", flush=True)
     source_archive = home / config["sourceArchive"]

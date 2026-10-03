@@ -20,6 +20,7 @@ import {
   normalizeBackendColor,
   SAME_ORIGIN_BRIDGE_ID,
   SAME_ORIGIN_BRIDGE_COLOR,
+  sameOriginBridgeLabel,
   suggestBackendColor,
   useBridge,
 } from "./bridge";
@@ -44,6 +45,7 @@ import {
   MIN_TERMINAL_FONT_SIZE_PX,
   parseTerminalFontSizePx,
 } from "./terminalPrefs";
+import type { TerminalFont, TerminalTheme } from "./terminalPrefs";
 import {
   MOBILE_TOUCH_SELECTION_ENDPOINT_TIMEOUT_OPTIONS_MS,
 } from "./mobileTerminalPrefs";
@@ -72,8 +74,17 @@ type Props = {
   onMultiHostSpaceSelection: (enabled: boolean) => void;
   terminalFontSizePx: number;
   onTerminalFontSizePx: (value: number) => void;
+  terminalFont: TerminalFont;
+  onTerminalFont: (value: TerminalFont) => void;
+  terminalTheme: TerminalTheme;
+  onTerminalTheme: (value: TerminalTheme) => void;
   terminalCursorBlink: boolean;
   onTerminalCursorBlink: (enabled: boolean) => void;
+  blockedNotificationsEnabled: boolean;
+  onBlockedNotificationsEnabled: (enabled: boolean) => void;
+  blockedNotificationSound: boolean;
+  onBlockedNotificationSound: (enabled: boolean) => void;
+  blockedNotificationPermission: NotificationPermission | "unsupported";
   desktopCommandComposer: boolean;
   onDesktopCommandComposer: (enabled: boolean) => void;
   desktopCommandEnterNewline: boolean;
@@ -138,8 +149,17 @@ export function BackendSettingsDialog({
   onMultiHostSpaceSelection,
   terminalFontSizePx,
   onTerminalFontSizePx,
+  terminalFont,
+  onTerminalFont,
+  terminalTheme,
+  onTerminalTheme,
   terminalCursorBlink,
   onTerminalCursorBlink,
+  blockedNotificationsEnabled,
+  onBlockedNotificationsEnabled,
+  blockedNotificationSound,
+  onBlockedNotificationSound,
+  blockedNotificationPermission,
   desktopCommandComposer,
   onDesktopCommandComposer,
   desktopCommandEnterNewline,
@@ -195,6 +215,7 @@ export function BackendSettingsDialog({
     [bridge.store.backends, form.id],
   );
   const sameOriginEnabled = bridge.store.enabledBridgeIds.includes(SAME_ORIGIN_BRIDGE_ID);
+  const sameOriginLabel = sameOriginBridgeLabel();
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -388,9 +409,9 @@ export function BackendSettingsDialog({
                         active={selectionMode === "same-origin"}
                         color={SAME_ORIGIN_BRIDGE_COLOR}
                         enabled={sameOriginEnabled}
-                        title="Same origin"
+                        title={sameOriginLabel}
                         subtitle={sameOriginUrl}
-                        toggleLabel={`${sameOriginEnabled ? "Disable" : "Enable"} Same origin bridge`}
+                        toggleLabel={`${sameOriginEnabled ? "Disable" : "Enable"} ${sameOriginLabel} bridge`}
                         onSelect={selectSameOrigin}
                         onToggle={() => bridge.setBridgeEnabled(SAME_ORIGIN_BRIDGE_ID, !sameOriginEnabled)}
                       />
@@ -427,7 +448,7 @@ export function BackendSettingsDialog({
                   <div className="backend-form">
                     {selectionMode === "same-origin" ? (
                       <div className="backend-static">
-                        <strong>Same origin</strong>
+                        <strong>{sameOriginLabel}</strong>
                         <span>
                           {sameOriginEnabled ? "Enabled" : "Disabled"}; uses the server that
                           delivered this web app.
@@ -547,6 +568,30 @@ export function BackendSettingsDialog({
                     </button>
                   </div>
                 </div>
+                <div className="settings-label">Blocked agent alerts</div>
+                <div className="settings-row">
+                  <span>Desktop notifications</span>
+                  <div className="segmented-control" role="group" aria-label="Blocked agent notifications">
+                    <button type="button" data-on={!blockedNotificationsEnabled || blockedNotificationPermission !== "granted"}
+                      aria-pressed={!blockedNotificationsEnabled || blockedNotificationPermission !== "granted"}
+                      onClick={() => onBlockedNotificationsEnabled(false)}>Off</button>
+                    <button type="button" data-on={blockedNotificationsEnabled && blockedNotificationPermission === "granted"}
+                      aria-pressed={blockedNotificationsEnabled && blockedNotificationPermission === "granted"}
+                      disabled={blockedNotificationPermission === "unsupported" || blockedNotificationPermission === "denied"}
+                      onClick={() => onBlockedNotificationsEnabled(true)}>On</button>
+                  </div>
+                </div>
+                <div className="settings-row">
+                  <span>Alert sound</span>
+                  <div className="segmented-control" role="group" aria-label="Blocked agent alert sound">
+                    <button type="button" data-on={!blockedNotificationSound} aria-pressed={!blockedNotificationSound}
+                      onClick={() => onBlockedNotificationSound(false)}>Off</button>
+                    <button type="button" data-on={blockedNotificationSound} aria-pressed={blockedNotificationSound}
+                      onClick={() => onBlockedNotificationSound(true)}>On</button>
+                  </div>
+                </div>
+                {blockedNotificationPermission === "denied" ? <p className="settings-help">Notifications are blocked in browser settings.</p> : null}
+                {blockedNotificationPermission === "unsupported" ? <p className="settings-help">This browser does not support desktop notifications.</p> : null}
               </div>
             ) : null}
 
@@ -704,7 +749,22 @@ export function BackendSettingsDialog({
 
             {activeArea === "terminal" ? (
               <div className="settings-section settings-section-flat">
-                <div className="settings-label">Terminal appearance</div>
+                <div className="settings-label">Appearance</div>
+                <label className="settings-row">
+                  <span>App and terminal theme</span>
+                  <select value={terminalTheme} onChange={(event) => onTerminalTheme(event.target.value as TerminalTheme)}>
+                    <option value="catppuccin">Catppuccin Mocha</option>
+                    <option value="solarized">Solarized Dark</option>
+                  </select>
+                </label>
+                <label className="settings-row">
+                  <span>Font</span>
+                  <select value={terminalFont} onChange={(event) => onTerminalFont(event.target.value as TerminalFont)}>
+                    <option value="system">System monospace</option>
+                    <option value="menlo">Menlo</option>
+                    <option value="jetbrains">JetBrains Mono Nerd Font</option>
+                  </select>
+                </label>
                 <div className="settings-row">
                   <span>Font size</span>
                   <NumberSettingControl

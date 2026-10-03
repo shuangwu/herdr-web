@@ -135,6 +135,32 @@ export function createCommands(httpUrl: BridgeHttpUrl = sameOriginHttpUrl) {
         destination: { type: "new_workspace", label },
         focus: true,
       }),
+    movePaneToTab: (paneId: string, tabId: string, targetPaneId: string, direction: SplitDirection = "right") =>
+      runCommand(httpUrl, "pane.move", {
+        pane_id: paneId,
+        destination: { type: "tab", tab_id: tabId, target_pane_id: targetPaneId, split: direction },
+        focus: true,
+      }),
+    zoomPane: (paneId: string, mode: "toggle" | "on" | "off" = "toggle") =>
+      runCommand(httpUrl, "pane.zoom", { pane_id: paneId, mode }),
+    resizePane: (paneId: string, direction: PaneFocusDirection, amount = 5) =>
+      runCommand(httpUrl, "pane.resize", { pane_id: paneId, direction, amount }),
+    swapPanes: (sourcePaneId: string, targetPaneId: string) =>
+      runCommand(httpUrl, "pane.swap", { source_pane_id: sourcePaneId, target_pane_id: targetPaneId }),
+    paneProcessInfo: (paneId: string) =>
+      runCommand(httpUrl, "pane.process_info", { pane_id: paneId }),
+    explainAgent: (paneId: string) =>
+      runCommand(httpUrl, "agent.explain", { target: paneId }),
+    promptAgent: (paneId: string, text: string) =>
+      runCommand(httpUrl, "agent.prompt", { target: paneId, text }),
+    listWorktrees: (workspaceId: string) =>
+      runCommand(httpUrl, "worktree.list", { workspace_id: workspaceId }),
+    createWorktree: (workspaceId: string, branch: string, base?: string, path?: string) =>
+      runCommand(httpUrl, "worktree.create", { workspace_id: workspaceId, branch, base, path, focus: true }),
+    openWorktree: (workspaceId: string, path: string) =>
+      runCommand(httpUrl, "worktree.open", { workspace_id: workspaceId, path, focus: true }),
+    removeWorktree: (workspaceId: string) =>
+      runCommand(httpUrl, "worktree.remove", { workspace_id: workspaceId, force: false }),
 
     launchPresetTab: (workspaceId: string, spec: LaunchSpec) =>
       runLaunchPreset(httpUrl, {

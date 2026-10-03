@@ -4,6 +4,7 @@ import {
   agentSubtitle,
   applySnapshotOverlays,
   buildCombinedTabWorkspaceGroups,
+  buildNumberedTabEntries,
   buildScopedAgentGroups,
   buildVisibleAgentPaneEntries,
   buildVisibleScopedWorkspaces,
@@ -24,6 +25,7 @@ import {
   menuItems,
   nextVisibleAgentPaneEntry,
   nextVisibleTabEntry,
+  numberedTabShortcut,
   resolveInitialSelectedBridgeId,
   resolveEffectiveSpaceGroup,
   resolveCreatedPaneNoteForTarget,
@@ -1302,6 +1304,35 @@ describe("App multi-bridge helpers", () => {
         (item) => `${item.bridgeId}:${item.tab.tab_id}`,
       ),
     ).toEqual(["bridge-a:tab-a", "bridge-b:tab-b"]);
+  });
+
+  it("numbers tabs globally by host, workspace, and tab rather than sidebar filters", () => {
+    const first = multiPaneSnapshot(
+      [workspace("workspace-2", 2), workspace("workspace-1", 1)],
+      [
+        pane("pane-2", "workspace-1", "tab-2"),
+        pane("pane-3", "workspace-2", "tab-3"),
+        pane("pane-1", "workspace-1", "tab-1"),
+      ],
+    );
+    first.tabs.find((tab) => tab.tab_id === "tab-1")!.number = 1;
+    first.tabs.find((tab) => tab.tab_id === "tab-2")!.number = 2;
+    const second = bridgeSnapshot("workspace-3", "tab-4", pane("pane-4", "workspace-3", "tab-4"));
+    expect(buildNumberedTabEntries([bridgeView("host-a", first), bridgeView("host-b", second)])
+      .map((entry) => `${entry.bridgeId}:${entry.tab.tab_id}`))
+      .toEqual(["host-a:tab-1", "host-a:tab-2", "host-a:tab-3", "host-b:tab-4"]);
+  });
+
+  it("recognizes Command number keys and the Command-Option fallback", () => {
+    const event = { metaKey: true, ctrlKey: false, shiftKey: false, code: "Digit2" };
+    expect(numberedTabShortcut(event)).toBe(2);
+    const optionEvent = { ...event, altKey: true };
+    expect(numberedTabShortcut(optionEvent)).toBe(2);
+    expect(numberedTabShortcut({ ...event, code: "Numpad9" })).toBe(9);
+    expect(numberedTabShortcut({ ...event, ctrlKey: true })).toBeNull();
+    expect(numberedTabShortcut({ ...event, shiftKey: true })).toBeNull();
+    expect(numberedTabShortcut({ ...event, metaKey: false })).toBeNull();
+    expect(numberedTabShortcut({ ...event, code: "Digit0" })).toBeNull();
   });
 
   it("sorts agent tabs first by attention while keeping plain tabs stable at the bottom", () => {

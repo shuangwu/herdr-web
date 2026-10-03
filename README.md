@@ -376,6 +376,7 @@ work when the terminal's hidden keyboard input has focus. OS-reserved shortcuts 
 | --- | --- | --- |
 | Select previous/next agent pane | `Cmd/Option+Shift+Up/Down` | `Meta/Alt+Shift+Up/Down` |
 | Select previous/next tab in the active space | `Cmd/Option+Shift+Left/Right` | `Meta/Alt+Shift+Left/Right` |
+| Select global tab 1–9 across hosts | `Cmd+1` … `Cmd+9` | `Meta+1` … `Meta+9` |
 | Focus split left/down/up/right | `Cmd/Option(+Shift)+H/J/K/L` | `Meta/Alt(+Shift)+H/J/K/L` |
 | Cycle split next | `Cmd/Option+Tab` | `Meta/Alt+Tab` |
 | Cycle split previous | `Cmd/Option+Shift+Tab` | `Meta/Alt+Shift+Tab` |
@@ -383,6 +384,11 @@ work when the terminal's hidden keyboard input has focus. OS-reserved shortcuts 
 | Split selected pane right | `Cmd/Option+Shift+-` | `Meta/Alt+Shift+-` |
 | Open the new-tab launch modal | `Cmd/Option+Shift+T` | `Meta/Alt+Shift+T` |
 | Confirm close for the focused split, or tab when only one split exists | `Cmd/Option+Shift+X` | `Meta/Alt+Shift+X` |
+
+Numbered tabs follow enabled host order, then workspace number, then tab number. They ignore the
+sidebar's current host, workspace, sort, and collapse filters. `Cmd+Option+1` … `Cmd+Option+9`
+also work when a browser reserves `Cmd+number` for its own tab switching. Hold `Cmd` to show
+shortcut numbers beside visible tabs in the sidebar's Tabs view.
 
 ## Runtime Model
 

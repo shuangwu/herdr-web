@@ -6,6 +6,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Command,
+  GitBranch,
+  Keyboard,
   Link2,
   ListCollapse,
   ListRestart,
@@ -16,6 +19,7 @@ import {
   RefreshCw,
   RotateCcw,
   Settings,
+  Server,
   SplitSquareHorizontal,
   SplitSquareVertical,
   SquareTerminal,
@@ -67,6 +71,11 @@ import type { AgentPinsListResponse } from "./agentPins";
 import { applyActivityMessage, parseActivityEventData, replayActivityMessages } from "./activity";
 import type { ActivityLogEntry } from "./activity";
 import { BackendSettingsDialog } from "./BackendSettingsDialog";
+import { CommandPalette } from "./CommandPalette";
+import type { PaletteEntry } from "./CommandPalette";
+import { ShortcutHelp, shortcutPeek } from "./ShortcutHelp";
+import { blockedAttentionPanes, blockedPaneKey, diffBlockedPaneStatuses } from "./blockedAttention";
+import { armBlockedAlertSound, claimBlockedAlertAcrossTabs, clearBlockedAlertClaim, playBlockedAlertSound } from "./blockedNotifications";
 import { useBridge } from "./bridge";
 import type { BridgeId, BridgeRuntime } from "./bridge";
 import { createCommands, createdPaneId } from "./commands";
@@ -85,6 +94,9 @@ import {
   parseMultiHostSpaceSelection,
 } from "./displayPrefs";
 import { LaunchDialog } from "./LaunchDialog";
+import { MachinesDialog } from "./MachinesDialog";
+import { PaneToolsDialog } from "./PaneToolsDialog";
+import { WorktreesDialog } from "./WorktreesDialog";
 import { resolveLaunchSpec } from "./launch";
 import type { LaunchTarget } from "./launch";
 import { fetchLauncherPresets, supportsLauncherPresets } from "./launcherPresets";
@@ -165,12 +177,17 @@ import {
   DEFAULT_DESKTOP_COMMAND_COMPOSER,
   DEFAULT_DESKTOP_COMMAND_ENTER_NEWLINE,
   DEFAULT_TERMINAL_FONT_SIZE_PX,
+  DEFAULT_TERMINAL_FONT,
+  DEFAULT_TERMINAL_THEME,
   defaultTerminalCursorBlink,
   parseDesktopCommandComposer,
   parseDesktopCommandEnterNewline,
   parseTerminalCursorBlink,
   parseTerminalFontSizePx,
+  parseTerminalFont,
+  parseTerminalTheme,
 } from "./terminalPrefs";
+import type { TerminalFont, TerminalTheme } from "./terminalPrefs";
 import {
   DEFAULT_AUTO_RENAME_UPLOAD_CONFLICTS,
   parseAutoRenameUploadConflicts,
@@ -426,7 +443,11 @@ type DisplayPrefs = {
   notesPanelOpen: boolean;
   sidebarOpen: boolean;
   terminalFontSizePx: number;
+  terminalFont: TerminalFont;
+  terminalTheme: TerminalTheme;
   terminalCursorBlink: boolean;
+  blockedNotificationsEnabled: boolean;
+  blockedNotificationSound: boolean;
   desktopCommandComposer: boolean;
   desktopCommandEnterNewline: boolean;
   terminalScreenReaderText: boolean;
@@ -495,7 +516,11 @@ function readDisplayPrefs(): DisplayPrefs {
     notesPanelOpen: false,
     sidebarOpen: true,
     terminalFontSizePx: DEFAULT_TERMINAL_FONT_SIZE_PX,
+    terminalFont: DEFAULT_TERMINAL_FONT,
+    terminalTheme: DEFAULT_TERMINAL_THEME,
     terminalCursorBlink: defaultTerminalCursorBlink(),
+    blockedNotificationsEnabled: false,
+    blockedNotificationSound: false,
     desktopCommandComposer: DEFAULT_DESKTOP_COMMAND_COMPOSER,
     desktopCommandEnterNewline: DEFAULT_DESKTOP_COMMAND_ENTER_NEWLINE,
     terminalScreenReaderText: DEFAULT_TERMINAL_SCREEN_READER_TEXT,
@@ -696,10 +721,16 @@ function parseDisplayPrefsValue(
       typeof parsed.notesPanelOpen === "boolean" ? parsed.notesPanelOpen : fallback.notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx: parseTerminalFontSizePx(parsed.terminalFontSizePx),
+    terminalFont: parseTerminalFont(parsed.terminalFont),
+    terminalTheme: parseTerminalTheme(parsed.terminalTheme),
     terminalCursorBlink: parseTerminalCursorBlink(
       parsed.terminalCursorBlink,
       fallback.terminalCursorBlink,
     ),
+    blockedNotificationsEnabled: typeof parsed.blockedNotificationsEnabled === "boolean"
+      ? parsed.blockedNotificationsEnabled : fallback.blockedNotificationsEnabled,
+    blockedNotificationSound: typeof parsed.blockedNotificationSound === "boolean"
+      ? parsed.blockedNotificationSound : fallback.blockedNotificationSound,
     desktopCommandComposer: parseDesktopCommandComposer(
       parsed.desktopCommandComposer,
       fallback.desktopCommandComposer,
@@ -1100,12 +1131,39 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
   const [noteDeleteTarget, setNoteDeleteTarget] = useState<ScopedNoteEntry | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
   const [backendSettingsOpen, setBackendSettingsOpen] = useState(false);
+  const [machinesOpen, setMachinesOpen] = useState(false);
+  const [paneToolsTarget, setPaneToolsTarget] = useState<{ bridgeId: BridgeId; paneId: string } | null>(null);
+  const [worktreesTarget, setWorktreesTarget] = useState<{ bridgeId: BridgeId; workspaceId: string } | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [paletteRecentIds, setPaletteRecentIds] = useState<string[]>([]);
   const [terminalFontSizePx, setTerminalFontSizePx] = useState(
     initialPrefs.terminalFontSizePx,
   );
+  const [terminalFont, setTerminalFont] = useState(initialPrefs.terminalFont);
+  const [terminalTheme, setTerminalTheme] = useState(initialPrefs.terminalTheme);
   const [terminalCursorBlink, setTerminalCursorBlink] = useState(
     initialPrefs.terminalCursorBlink,
   );
+  const [blockedNotificationsEnabled, setBlockedNotificationsEnabled] = useState(
+    initialPrefs.blockedNotificationsEnabled,
+  );
+  const [blockedNotificationSound, setBlockedNotificationSound] = useState(
+    initialPrefs.blockedNotificationSound,
+  );
+  const [blockedNotificationPermission, setBlockedNotificationPermission] = useState<NotificationPermission | "unsupported">(
+    () => typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+  );
+  useEffect(() => {
+    if (!blockedNotificationSound) return;
+    const arm = () => armBlockedAlertSound();
+    window.addEventListener("pointerdown", arm, { once: true });
+    window.addEventListener("keydown", arm, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", arm);
+      window.removeEventListener("keydown", arm);
+    };
+  }, [blockedNotificationSound]);
   const [desktopCommandComposer, setDesktopCommandComposer] = useState(
     initialPrefs.desktopCommandComposer,
   );
@@ -1165,6 +1223,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
   const isTouchInput = useIsTouchInput();
   const showMobileKeyboardHideRefit = isNativeAndroid();
   const connectionRefs = useRef<Record<string, BridgeConnectionRef>>({});
+  const blockedStatusesRef = useRef(new Map<string, Map<string, AgentStatus>>());
+  const notificationNavigateRef = useRef<(bridgeId: string, paneId: string) => void>(() => {});
   const isCompactLayoutRef = useRef(isCompactLayout);
   const showDetailRef = useRef(showDetail);
   const selectedBridgeIdRef = useRef(selectedBridgeId);
@@ -1248,7 +1308,11 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       setSelectedPanesByBridgeId(sharedNavigationPrefs.selectedPanesByBridgeId);
       setActiveWorkspacesByBridgeId(sharedNavigationPrefs.activeWorkspacesByBridgeId);
       setTerminalFontSizePx(prefs.terminalFontSizePx);
+      setTerminalFont(prefs.terminalFont);
+      setTerminalTheme(prefs.terminalTheme);
       setTerminalCursorBlink(prefs.terminalCursorBlink);
+      setBlockedNotificationsEnabled(prefs.blockedNotificationsEnabled);
+      setBlockedNotificationSound(prefs.blockedNotificationSound);
       setDesktopCommandComposer(prefs.desktopCommandComposer);
       setDesktopCommandEnterNewline(prefs.desktopCommandEnterNewline);
       setTerminalScreenReaderText(prefs.terminalScreenReaderText);
@@ -1356,6 +1420,15 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       }),
     [bridge.enabledRuntimes, connectionStates],
   );
+  const numberedTabEntries = useMemo(() => buildNumberedTabEntries(bridgeViews), [bridgeViews]);
+  const needsAttention = useMemo(() => blockedAttentionPanes(bridgeViews.flatMap((view) =>
+    view.snapshot ? [{
+      bridgeId: view.runtime.id,
+      bridgeLabel: view.runtime.label,
+      panes: view.snapshot.panes,
+      workspaces: view.snapshot.workspaces,
+    }] : [],
+  )), [bridgeViews]);
   useEffect(() => {
     for (const { runtime, snapshot, loadState } of bridgeViews) {
       if (runtime.canConnect && loadState === "ready" && snapshot) {
@@ -1570,6 +1643,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
         menuPinLabel,
         menuNotesSupported,
         menuWorkspaceReorderSupported,
+        menuSupportedCommands.some((command) => ["pane.zoom", "pane.resize", "pane.swap", "pane.process_info", "agent.explain", "agent.prompt"].includes(command)),
       )
     : [];
 
@@ -1804,7 +1878,11 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       notesPanelOpen,
       sidebarOpen,
       terminalFontSizePx,
+      terminalFont,
+      terminalTheme,
       terminalCursorBlink,
+      blockedNotificationsEnabled,
+      blockedNotificationSound,
       desktopCommandComposer,
       desktopCommandEnterNewline,
       terminalScreenReaderText,
@@ -1845,7 +1923,11 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx,
+    terminalFont,
+    terminalTheme,
     terminalCursorBlink,
+    blockedNotificationsEnabled,
+    blockedNotificationSound,
     desktopCommandComposer,
     desktopCommandEnterNewline,
     terminalScreenReaderText,
@@ -2516,6 +2598,49 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     requestTerminalFocus();
   };
 
+  notificationNavigateRef.current = (bridgeId, paneId) => {
+    const pane = snapshotForBridge(bridgeId)?.panes.find((candidate) => candidate.pane_id === paneId);
+    if (pane) focusPane(bridgeId, pane);
+  };
+
+  useEffect(() => {
+    for (const view of bridgeViews) {
+      if (!view.snapshot) continue;
+      const bridgeId = view.runtime.id;
+      const previous = blockedStatusesRef.current.get(bridgeId) ?? null;
+      const { current, entered, cleared } = diffBlockedPaneStatuses(previous, bridgeId, view.snapshot.panes);
+      blockedStatusesRef.current.set(bridgeId, current);
+      for (const paneKey of cleared) clearBlockedAlertClaim(paneKey);
+      if (!blockedNotificationsEnabled || blockedNotificationPermission !== "granted" || !view.runtime.canConnect) continue;
+      for (const pane of entered) {
+        const paneKey = blockedPaneKey(bridgeId, pane);
+        const workspaceLabel = view.snapshot.workspaces.find((workspace) => workspace.workspace_id === pane.workspace_id)?.label || "Workspace";
+        void claimBlockedAlertAcrossTabs(paneKey).then((claimed) => {
+          if (!claimed || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+          if (connectionRefs.current[bridgeId]?.snapshot?.panes.find((candidate) => candidate.pane_id === pane.pane_id)?.agent_status !== "blocked") {
+            clearBlockedAlertClaim(paneKey);
+            return;
+          }
+          try {
+            const notification = new Notification(`${paneTitle(pane)} needs attention`, {
+              body: `${view.runtime.label} · ${workspaceLabel}`,
+              tag: paneKey,
+              silent: true,
+            });
+            notification.onclick = () => {
+              window.focus();
+              notificationNavigateRef.current(bridgeId, pane.pane_id);
+              notification.close();
+            };
+            if (blockedNotificationSound) playBlockedAlertSound();
+          } catch {
+            clearBlockedAlertClaim(paneKey);
+          }
+        });
+      }
+    }
+  }, [bridgeViews, blockedNotificationsEnabled, blockedNotificationPermission, blockedNotificationSound]);
+
   const selectNote = (bridgeId: BridgeId, noteId: string) => {
     if (!notesEnabled) {
       return;
@@ -2952,8 +3077,26 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
   };
 
   useEffect(() => {
+    const onPaletteShortcut = (event: KeyboardEvent) => {
+      if (!event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+      const palette = !event.shiftKey && event.code === "KeyK";
+      const help = !event.shiftKey && event.code === "Slash";
+      if ((!palette && !help) || isShortcutTextEntryTarget(event.target) ||
+        menu || dialog || launchTarget || backendSettingsOpen || machinesOpen || paneToolsTarget || worktreesTarget || commandPaletteOpen ||
+        shortcutHelpOpen || hasOpenModal()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (palette) setCommandPaletteOpen(true);
+      else setShortcutHelpOpen(true);
+    };
+    window.addEventListener("keydown", onPaletteShortcut, { capture: true });
+    return () => window.removeEventListener("keydown", onPaletteShortcut, { capture: true });
+  }, [menu, dialog, launchTarget, backendSettingsOpen, machinesOpen, paneToolsTarget, worktreesTarget, commandPaletteOpen, shortcutHelpOpen]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const navigationShortcut = isAppNavigationShortcut(event);
+      const numberedTab = numberedTabShortcut(event);
       const closeTabShortcut = isCloseTabShortcut(event);
       const newTabShortcut = isNewTabShortcut(event);
       const splitDirection = splitSupported ? splitShortcutDirection(event) : null;
@@ -2964,6 +3107,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       const paneCycleStep = paneCycleShortcutStep(event);
       if (
         (!navigationShortcut &&
+          numberedTab === null &&
           !closeTabShortcut &&
           !newTabShortcut &&
           !splitDirection &&
@@ -2974,8 +3118,22 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
         menu ||
         dialog ||
         launchTarget ||
+        commandPaletteOpen ||
+        shortcutHelpOpen ||
+        machinesOpen ||
+        paneToolsTarget ||
+        worktreesTarget ||
         hasOpenModal()
       ) {
+        return;
+      }
+
+      if (numberedTab !== null) {
+        const target = numberedTabEntries[numberedTab - 1];
+        if (!target) return;
+        event.preventDefault();
+        event.stopPropagation();
+        focusTab(target.bridgeId, target.tab.tab_id);
         return;
       }
 
@@ -3220,9 +3378,15 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     hostScope,
     isCompactLayout,
     launchTarget,
+    commandPaletteOpen,
+    shortcutHelpOpen,
+    machinesOpen,
+    paneToolsTarget,
+    worktreesTarget,
     menu,
     multiHostSpaceSelection,
     navigationIsShared,
+    numberedTabEntries,
     paneFocusSupported,
     pinnedAgentKeys,
     scope,
@@ -3663,6 +3827,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       void toggleAgentPin(bridgeId, id, true);
     } else if (key === "add_note" && kind === "pane") {
       openQuickPaneNoteDialog(bridgeId, id, label);
+    } else if (key === "tools" && kind === "pane") {
+      setPaneToolsTarget({ bridgeId, paneId: id });
     } else if (key === "move_new_tab" && kind === "pane") {
       const pane = connectionRefs.current[bridgeId]?.snapshot?.panes.find(
         (item) => item.pane_id === id,
@@ -3778,6 +3944,96 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     void exec(runtime, action, true).then((ok) => ok && setLaunchTarget(null));
   };
 
+  const paletteEntries: PaletteEntry[] = [
+    { id: "action:settings", kind: "Action", label: "Open settings", onSelect: () => setBackendSettingsOpen(true) },
+    { id: "action:machines", kind: "Action", label: "Manage machines", onSelect: () => setMachinesOpen(true) },
+    { id: "action:refresh", kind: "Action", label: "Refresh bridges", onSelect: refreshNow },
+    { id: "action:shortcuts", kind: "Action", label: "Show keyboard shortcuts", onSelect: () => setShortcutHelpOpen(true) },
+  ];
+  if (selectedRuntime && selectedCommands && activeSpace) {
+    if (selectedRuntime.capabilities?.commands.includes("worktree.list")) {
+      paletteEntries.push({
+        id: "action:worktrees", kind: "Action", label: "Manage worktrees",
+        detail: `${selectedRuntime.label} · ${activeSpace.label}`,
+        onSelect: () => setWorktreesTarget({ bridgeId: selectedRuntime.id, workspaceId: activeSpace.workspace_id }),
+      });
+    }
+    paletteEntries.push({
+      id: "action:new-space", kind: "Action", label: "Create Space",
+      detail: selectedRuntime.label,
+      onSelect: () => void exec(selectedRuntime, () => selectedCommands.createWorkspace(activeSpace.workspace_id), true),
+    });
+    paletteEntries.push({
+      id: "action:new-tab", kind: "Action", label: "Create tab",
+      detail: `${selectedRuntime.label} · ${activeSpace.label}`,
+      onSelect: () => setLaunchTarget({ mode: "tab", workspaceId: activeSpace.workspace_id, bridgeId: selectedRuntime.id }),
+    });
+  }
+  if (selectedRuntime && selectedPane && selectedRuntime.capabilities?.commands.some((method) =>
+    ["pane.zoom", "pane.resize", "pane.swap", "pane.process_info", "agent.explain", "agent.prompt"].includes(method))) {
+    paletteEntries.push({
+      id: "action:pane-tools", kind: "Action", label: "Open pane tools",
+      detail: `${selectedRuntime.label} · ${paneTitle(selectedPane)}`,
+      onSelect: () => setPaneToolsTarget({ bridgeId: selectedRuntime.id, paneId: selectedPane.pane_id }),
+    });
+  }
+  for (const view of bridgeViews) {
+    const { runtime, snapshot: hostSnapshot } = view;
+    if (!hostSnapshot) continue;
+    paletteEntries.push({
+      id: `host:${runtime.id}`, kind: "Host", label: runtime.label,
+      onSelect: () => { setSelectedBridgeId(runtime.id); setHostScope("selected"); },
+    });
+    for (const workspace of hostSnapshot.workspaces) {
+      paletteEntries.push({
+        id: `space:${runtime.id}:${workspace.workspace_id}`, kind: "Space", label: workspace.label,
+        detail: runtime.label, search: "workspace",
+        onSelect: () => selectSpace(runtime.id, workspace.workspace_id),
+      });
+    }
+    for (const tab of hostSnapshot.tabs) {
+      const workspace = hostSnapshot.workspaces.find((item) => item.workspace_id === tab.workspace_id);
+      paletteEntries.push({
+        id: `tab:${runtime.id}:${tab.tab_id}`, kind: "Tab",
+        label: displayTabLabel(tab, hostSnapshot.panes),
+        detail: `${runtime.label} · ${workspace?.label ?? "Space"}`,
+        onSelect: () => selectTab(runtime.id, tab.tab_id),
+      });
+    }
+    for (const pane of hostSnapshot.panes) {
+      const workspace = hostSnapshot.workspaces.find((item) => item.workspace_id === pane.workspace_id);
+      const agent = isAgentPane(pane);
+      paletteEntries.push({
+        id: `pane:${runtime.id}:${pane.pane_id}`, kind: agent ? "Agent" : "Pane",
+        label: agent ? agentTitle(pane) : paneTitle(pane),
+        detail: `${runtime.label} · ${workspace?.label ?? "Space"}`,
+        onSelect: () => openPane(runtime.id, pane),
+      });
+    }
+  }
+  if (notesEnabled) {
+    for (const entry of allScopedNotes.filter((item) => !item.note.deleted_at && !item.note.archived_at)) {
+      paletteEntries.push({
+        id: `note:${entry.bridgeId}:${entry.note.note_id}`, kind: "Note",
+        label: entry.note.title || "Untitled note",
+        detail: `${entry.bridgeLabel} · ${entry.workspace?.label ?? "Detached"}`,
+        onSelect: () => { setSelectedBridgeId(entry.bridgeId); selectNote(entry.bridgeId, entry.note.note_id); },
+      });
+    }
+  }
+  const recentOrder = new Map(paletteRecentIds.map((id, index) => [id, index]));
+  const orderedPaletteEntries = paletteEntries
+    .map((entry, index) => ({ entry, index }))
+    .sort((left, right) => (recentOrder.get(left.entry.id) ?? 1000) - (recentOrder.get(right.entry.id) ?? 1000) || left.index - right.index)
+    .map(({ entry }) => ({
+      ...entry,
+      onSelect: () => {
+        setPaletteRecentIds((current) => [entry.id, ...current.filter((id) => id !== entry.id)].slice(0, 8));
+        entry.onSelect();
+        if (entry.kind !== "Action") requestTerminalFocus();
+      },
+    }));
+
   const renderTerminal = !isCompactLayout || showDetail;
   const appStyle = {
     "--sidebar-w": `${sidebarWidth}px`,
@@ -3801,6 +4057,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     <div
       className="app"
       style={appStyle}
+      data-terminal-theme={terminalTheme}
       data-sidebar={sidebarOpen ? "open" : "closed"}
       data-notes={notesPanelOpen && notesEnabled ? "open" : "closed"}
       data-resizing-sidebar={resizingSidebar ? "true" : "false"}
@@ -3847,7 +4104,32 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           }
         }}
         onKeyDownCapture={(event) => {
-          if (!spaceReorderMode || event.key !== "Tab") {
+          if (!spaceReorderMode) {
+            const target = event.target;
+            const row = target instanceof HTMLElement
+              ? target.closest<HTMLButtonElement>("[data-sidebar-nav-row]")
+              : null;
+            if (!row || !event.currentTarget.contains(row)) return;
+            if (event.key === "Escape") {
+              event.preventDefault();
+              requestTerminalFocus();
+              return;
+            }
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(
+              "[data-sidebar-nav-row]:not(:disabled)",
+            ));
+            const index = rows.indexOf(row);
+            if (index < 0 || rows.length === 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const step = event.key === "ArrowDown" ? 1 : -1;
+            const next = rows[(index + step + rows.length) % rows.length];
+            next.focus();
+            next.scrollIntoView({ block: "nearest" });
+            return;
+          }
+          if (event.key !== "Tab") {
             return;
           }
           const controls = Array.from(
@@ -3873,6 +4155,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       >
         <Switcher
           bridgeViews={bridgeViews}
+          numberedTabs={numberedTabEntries}
           selectedBridgeId={selectedRuntime?.id ?? null}
           hostScope={hostScope}
           snapshot={snapshot}
@@ -3880,7 +4163,6 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           bridgeCanConnect={selectedRuntime?.canConnect ?? false}
           bridgeError={selectedRuntime?.capabilityError ?? null}
           bridgeLabel={selectedRuntime?.label ?? "No bridge"}
-          bridgeMode={selectedRuntime?.mode ?? "configured"}
           capabilityState={selectedRuntime?.capabilityState ?? "idle"}
           scope={scope}
           sidebarView={sidebarView}
@@ -3934,6 +4216,13 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             }
           }}
           onBackendSettings={() => setBackendSettingsOpen(true)}
+          onMachines={() => setMachinesOpen(true)}
+          worktreesAvailable={Boolean(selectedRuntime?.capabilities?.commands.includes("worktree.list") && activeSpace)}
+          onWorktrees={() => {
+            if (selectedRuntime && activeSpace) setWorktreesTarget({ bridgeId: selectedRuntime.id, workspaceId: activeSpace.workspace_id });
+          }}
+          onCommandPalette={() => setCommandPaletteOpen(true)}
+          onShortcutHelp={() => setShortcutHelpOpen(true)}
           onCreateSpace={() =>
             selectedRuntime && selectedCommands
               ? void exec(
@@ -3950,6 +4239,20 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             setMenu({ kind, bridgeId, id, label, x, y, clearable, pinLabel })
           }
         />
+        {needsAttention.length > 0 ? (
+          <section className="needs-attention" aria-label="Needs attention">
+            <div className="needs-attention-heading">Needs attention <span>{needsAttention.length}</span></div>
+            <div className="needs-attention-list">
+              {needsAttention.map((entry) => (
+                <button key={blockedPaneKey(entry.bridgeId, entry.pane)} type="button"
+                  className="needs-attention-item" onClick={() => focusPane(entry.bridgeId, entry.pane)}>
+                  <span className="needs-attention-name">{paneTitle(entry.pane)}</span>
+                  <span className="needs-attention-location">{entry.bridgeLabel} · {entry.workspaceLabel}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <div
           className="sidebar-resizer"
           role="separator"
@@ -4018,6 +4321,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
 
       <section className="stage" aria-label="Terminal">
         <TabBar
+          bridgeId={selectedRuntime?.id ?? null}
+          numberedTabs={numberedTabEntries}
           snapshot={snapshot}
           activeSpace={activeSpace}
           selectedPane={selectedPane}
@@ -4166,6 +4471,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             desktopCommandEnterNewline={desktopCommandEnterNewline}
             terminalCursorBlink={terminalCursorBlink}
             terminalFontSizePx={terminalFontSizePx}
+            terminalFont={terminalFont}
+            terminalTheme={terminalTheme}
             terminalScreenReaderText={terminalScreenReaderText}
             autoRenameUploadConflicts={autoRenameUploadConflicts}
             mobileControlsScalePercent={mobileControlsScalePercent}
@@ -4198,6 +4505,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             desktopCommandEnterNewline={desktopCommandEnterNewline}
             cursorBlink={!isTouchInput && terminalCursorBlink}
             terminalFontSizePx={terminalFontSizePx}
+            terminalFont={terminalFont}
+            terminalTheme={terminalTheme}
             terminalScreenReaderText={terminalScreenReaderText}
             autoRenameUploadConflicts={autoRenameUploadConflicts}
             mobileControlsScalePercent={mobileControlsScalePercent}
@@ -4437,8 +4746,33 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           onMultiHostSpaceSelection={setMultiHostSpaceSelection}
           terminalFontSizePx={terminalFontSizePx}
           onTerminalFontSizePx={setTerminalFontSizePx}
+          terminalFont={terminalFont}
+          onTerminalFont={setTerminalFont}
+          terminalTheme={terminalTheme}
+          onTerminalTheme={setTerminalTheme}
           terminalCursorBlink={terminalCursorBlink}
           onTerminalCursorBlink={setTerminalCursorBlink}
+          blockedNotificationsEnabled={blockedNotificationsEnabled}
+          onBlockedNotificationsEnabled={(enabled) => {
+            if (!enabled) {
+              setBlockedNotificationsEnabled(false);
+              return;
+            }
+            if (typeof Notification === "undefined") {
+              setBlockedNotificationPermission("unsupported");
+              return;
+            }
+            void Notification.requestPermission().then((permission) => {
+              setBlockedNotificationPermission(permission);
+              setBlockedNotificationsEnabled(permission === "granted");
+            }).catch(() => setBlockedNotificationPermission("denied"));
+          }}
+          blockedNotificationSound={blockedNotificationSound}
+          onBlockedNotificationSound={(enabled) => {
+            setBlockedNotificationSound(enabled);
+            if (enabled) armBlockedAlertSound();
+          }}
+          blockedNotificationPermission={blockedNotificationPermission}
           desktopCommandComposer={desktopCommandComposer}
           onDesktopCommandComposer={setDesktopCommandComposer}
           desktopCommandEnterNewline={desktopCommandEnterNewline}
@@ -4484,6 +4818,30 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           }}
         />
       ) : null}
+
+      {commandPaletteOpen ? (
+        <CommandPalette entries={orderedPaletteEntries} onClose={() => setCommandPaletteOpen(false)} />
+      ) : null}
+      {shortcutHelpOpen ? <ShortcutHelp onClose={() => setShortcutHelpOpen(false)} /> : null}
+      {machinesOpen ? <MachinesDialog onClose={() => setMachinesOpen(false)} /> : null}
+      {paneToolsTarget ? (() => {
+        const runtime = bridge.getRuntime(paneToolsTarget.bridgeId);
+        const currentSnapshot = snapshotForBridge(paneToolsTarget.bridgeId);
+        const pane = currentSnapshot?.panes.find((item) => item.pane_id === paneToolsTarget.paneId);
+        return runtime && currentSnapshot && pane ? <PaneToolsDialog
+          runtime={runtime} pane={pane} snapshot={currentSnapshot} busy={busy}
+          onRun={(action, selectCreated) => exec(runtime, action, selectCreated)}
+          onClose={() => setPaneToolsTarget(null)} /> : null;
+      })() : null}
+      {worktreesTarget ? (() => {
+        const runtime = bridge.getRuntime(worktreesTarget.bridgeId);
+        const currentSnapshot = snapshotForBridge(worktreesTarget.bridgeId);
+        const workspace = currentSnapshot?.workspaces.find((item) => item.workspace_id === worktreesTarget.workspaceId);
+        return runtime && workspace ? <WorktreesDialog
+          runtime={runtime} workspace={workspace} busy={busy}
+          onRun={(action, selectCreated) => exec(runtime, action, selectCreated)}
+          onClose={() => setWorktreesTarget(null)} /> : null;
+      })() : null}
 
       {error ? (
         <div className="toast" role="alert">
@@ -5353,6 +5711,20 @@ export function buildVisibleTabEntries(
   return spaceGroups.flatMap(flattenGroup);
 }
 
+export function buildNumberedTabEntries(bridgeViews: BridgeConnectionView[]) {
+  return bridgeViews.flatMap((view) => {
+    const snapshot = view.snapshot;
+    if (!snapshot) return [];
+    return [...snapshot.workspaces]
+      .sort((a, b) => a.number - b.number)
+      .flatMap((workspace) =>
+        sortTabsForWorkspace(snapshot.tabs, workspace.workspace_id)
+          .filter((tab) => snapshot.panes.some((pane) => pane.tab_id === tab.tab_id))
+          .map((tab) => ({ bridgeId: view.runtime.id, workspace, tab })),
+      );
+  });
+}
+
 export function sortScopedTabEntriesByAgents(
   entries: ScopedTabEntry[],
   agentSort: AgentSort,
@@ -5821,6 +6193,12 @@ function isAppNavigationShortcut(event: KeyboardEvent) {
   );
 }
 
+export function numberedTabShortcut(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "shiftKey" | "code">) {
+  if (!event.metaKey || event.ctrlKey || event.shiftKey) return null;
+  const match = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
+  return match ? Number(match[1]) : null;
+}
+
 function isCloseTabShortcut(event: KeyboardEvent) {
   return (
     isPlatformShortcutModifier(event) &&
@@ -5922,6 +6300,8 @@ function SplitGrid({
   desktopCommandEnterNewline,
   terminalCursorBlink,
   terminalFontSizePx,
+  terminalFont,
+  terminalTheme,
   terminalScreenReaderText,
   autoRenameUploadConflicts,
   mobileControlsScalePercent,
@@ -5950,6 +6330,8 @@ function SplitGrid({
   desktopCommandEnterNewline: boolean;
   terminalCursorBlink: boolean;
   terminalFontSizePx: number;
+  terminalFont: TerminalFont;
+  terminalTheme: TerminalTheme;
   terminalScreenReaderText: boolean;
   autoRenameUploadConflicts: boolean;
   mobileControlsScalePercent: number;
@@ -5994,6 +6376,8 @@ function SplitGrid({
               desktopCommandEnterNewline={desktopCommandEnterNewline}
               cursorBlink={!touchInput && terminalCursorBlink}
               terminalFontSizePx={terminalFontSizePx}
+              terminalFont={terminalFont}
+              terminalTheme={terminalTheme}
               terminalScreenReaderText={terminalScreenReaderText}
               autoRenameUploadConflicts={autoRenameUploadConflicts}
               mobileControlsScalePercent={mobileControlsScalePercent}
@@ -6019,6 +6403,8 @@ function SplitGrid({
 }
 
 function TabBar({
+  bridgeId,
+  numberedTabs,
   snapshot,
   activeSpace,
   selectedPane,
@@ -6026,6 +6412,8 @@ function TabBar({
   onCreateTab,
   onMenu,
 }: {
+  bridgeId: BridgeId | null;
+  numberedTabs: ReturnType<typeof buildNumberedTabEntries>;
   snapshot: Snapshot | null;
   activeSpace: WorkspaceInfo | null;
   selectedPane: PaneInfo | null;
@@ -6056,6 +6444,10 @@ function TabBar({
       <div className="tabbar-scroll" role="tablist" aria-label="Tabs">
         {tabs.map((tab) => {
           const label = displayTabLabel(tab, snapshot.panes);
+          const numberedIndex = numberedTabs.findIndex(
+            (entry) => entry.bridgeId === bridgeId && entry.tab.tab_id === tab.tab_id,
+          );
+          const shortcutNumber = numberedIndex >= 0 && numberedIndex < 9 ? numberedIndex + 1 : null;
           return (
             <button
               key={tab.tab_id}
@@ -6063,6 +6455,8 @@ function TabBar({
               className="tabbar-tab"
               role="tab"
               aria-selected={tab.tab_id === activeTabId}
+              aria-keyshortcuts={shortcutNumber ? `Meta+${shortcutNumber}` : undefined}
+              title={shortcutNumber ? `${label} · Cmd+${shortcutNumber}` : label}
               data-active={tab.tab_id === activeTabId}
               onClick={() => onSelectTab(tab.tab_id)}
               onContextMenu={(event) => {
@@ -6082,6 +6476,7 @@ function TabBar({
             >
               <span className="dot" data-status={tab.agent_status} />
               <span className="tabbar-name">{label}</span>
+              {shortcutNumber ? <span className="tabbar-number mono" aria-hidden="true">{shortcutNumber}</span> : null}
             </button>
           );
         })}
@@ -6104,6 +6499,7 @@ function TabBar({
 
 function Switcher({
   bridgeViews,
+  numberedTabs,
   selectedBridgeId,
   hostScope,
   snapshot,
@@ -6111,7 +6507,6 @@ function Switcher({
   bridgeCanConnect,
   bridgeError,
   bridgeLabel,
-  bridgeMode,
   capabilityState,
   scope,
   sidebarView,
@@ -6157,11 +6552,17 @@ function Switcher({
   onRefresh,
   onRefreshBridge,
   onBackendSettings,
+  onMachines,
+  worktreesAvailable,
+  onWorktrees,
+  onCommandPalette,
+  onShortcutHelp,
   onCreateSpace,
   onCreateTab,
   onScopedMenu,
 }: {
   bridgeViews: BridgeConnectionView[];
+  numberedTabs: ReturnType<typeof buildNumberedTabEntries>;
   selectedBridgeId: BridgeId | null;
   hostScope: HostScope;
   snapshot: Snapshot | null;
@@ -6169,7 +6570,6 @@ function Switcher({
   bridgeCanConnect: boolean;
   bridgeError: string | null;
   bridgeLabel: string;
-  bridgeMode: "same-origin" | "configured" | "disconnected";
   capabilityState: "idle" | "probing" | "ready" | "error";
   scope: Scope;
   sidebarView: SidebarView;
@@ -6220,6 +6620,11 @@ function Switcher({
   onRefresh: () => void;
   onRefreshBridge: (bridgeId: BridgeId) => void;
   onBackendSettings: () => void;
+  onMachines: () => void;
+  worktreesAvailable: boolean;
+  onWorktrees: () => void;
+  onCommandPalette: () => void;
+  onShortcutHelp: () => void;
   onCreateSpace: () => void;
   onCreateTab: (bridgeId: BridgeId, workspaceId: string) => void;
   onScopedMenu: (
@@ -6233,6 +6638,33 @@ function Switcher({
     pinLabel?: "agent" | "pane",
   ) => void;
 }) {
+  const [commandHeld, setCommandHeld] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Meta" || event.metaKey) setCommandHeld(true);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Meta" || !event.metaKey) setCommandHeld(false);
+    };
+    const clear = () => setCommandHeld(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clear);
+    document.addEventListener("visibilitychange", clear);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clear);
+      document.removeEventListener("visibilitychange", clear);
+    };
+  }, []);
+  const shortcutNumberForTab = (bridgeId: BridgeId, tabId: string) => {
+    if (!commandHeld) return null;
+    const index = numberedTabs.findIndex(
+      (entry) => entry.bridgeId === bridgeId && entry.tab.tab_id === tabId,
+    );
+    return index >= 0 && index < 9 ? index + 1 : null;
+  };
   const [optionsMenu, setOptionsMenu] = useState<{ x: number; y: number } | null>(null);
   const [spaceOptionsMenu, setSpaceOptionsMenu] = useState<{ x: number; y: number } | null>(null);
   const [spaceDragTarget, setSpaceDragTarget] = useState<string | null | undefined>(undefined);
@@ -6742,13 +7174,19 @@ function Switcher({
       ? null
       : group.tabs.map(({ tab, panes: tabPanes }) => {
           const tabLabel = displayTabLabel(tab, group.snapshot.panes);
+          const shortcutNumber = shortcutNumberForTab(group.bridgeId, tab.tab_id);
+          const showTabDivider = shouldShowTabDivider(
+            agentGroup,
+            group.workspace.tab_count,
+            tabPanes.length,
+          );
           const rowContext = sidebarRowContext(
             agentGroup,
             hostScope,
             group.bridgeLabel,
             group.workspace.label,
           );
-          const paneRows = tabPanes.map((pane) => {
+          const paneRows = tabPanes.map((pane, tabPaneIndex) => {
             const index = paneIndex++;
             const pinned = isAgentPinned(pinnedAgentKeys, group.bridgeId, pane.pane_id);
             const renderAsAgent = shouldRenderAgentRowInTabs(pane, agentFeaturesInTabs);
@@ -6777,6 +7215,7 @@ function Switcher({
                   bridgeLabel={rowContext.bridgeLabel}
                   pinned={pinned}
                   active={active}
+                  shortcutNumber={!showTabDivider && tabPaneIndex === 0 ? shortcutNumber : null}
                   onSelect={onSelect}
                   onMenu={onPaneMenu}
                 />
@@ -6794,6 +7233,7 @@ function Switcher({
                 bridgeLabel={rowContext.bridgeLabel}
                 pinned={pinned}
                 active={active}
+                shortcutNumber={!showTabDivider && tabPaneIndex === 0 ? shortcutNumber : null}
                 onSelect={onSelect}
                 onMenu={onPaneMenu}
               />
@@ -6804,10 +7244,11 @@ function Switcher({
           }
           return (
             <div className="tabgrp" key={`${group.bridgeId}:${tab.tab_id}`}>
-              {shouldShowTabDivider(agentGroup, group.workspace.tab_count, tabPanes.length) ? (
+              {showTabDivider ? (
                 <TabDivider
                   label={tabLabel}
                   count={tabPanes.length}
+                  shortcutNumber={shortcutNumber}
                   onSelect={() => onSelectTab(group.bridgeId, tab.tab_id)}
                   onMenu={(x, y) =>
                     onScopedMenu(
@@ -7260,21 +7701,29 @@ function Switcher({
       ) : null}
       <header className="sb-head">
         <div className="brand">
-          <span className="brand-mark">
-            <img className="brand-logo" src="/herdr-logo.svg" alt="" aria-hidden="true" />
-            <span className="brand-title">
-              <span className="brand-dot dot" data-status={roll} />
-              herdr-web
-            </span>
+          <span className="brand-mark" title={`Herdr Web · ${headerSummary || bridgeLabel}`}>
+            <img className="brand-logo" src="/herdr-logo.svg" alt="Herdr Web" />
+            <span className="brand-dot dot" data-status={roll} aria-hidden="true" />
           </span>
-          {headerSummary ? (
-            <span className="brand-sub">
-              <b>{headerSummary}</b>
-            </span>
-          ) : bridgeMode === "configured" ? (
-            <span className="brand-sub">{bridgeLabel}</span>
-          ) : null}
         </div>
+        <button className="icon-btn" type="button" aria-label="Command palette" title="Command palette (⌘K)" onClick={(event) => {
+          focusOverlayTrigger(event.currentTarget);
+          onCommandPalette();
+        }}><Command size={16} /></button>
+        <button className="icon-btn" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (⌘/)" onClick={(event) => {
+          focusOverlayTrigger(event.currentTarget);
+          onShortcutHelp();
+        }}><Keyboard size={16} /></button>
+        <button className="icon-btn" type="button" aria-label="Machines" title="Machines: diagnose and repair remote bridges" onClick={(event) => {
+          focusOverlayTrigger(event.currentTarget);
+          onMachines();
+        }}><Server size={16} /></button>
+        <button className="icon-btn" type="button" aria-label="Worktrees"
+          title={worktreesAvailable ? "Worktrees for the selected Space" : "Worktrees require a selected Space and bridge support"}
+          disabled={!worktreesAvailable} onClick={(event) => {
+            focusOverlayTrigger(event.currentTarget);
+            onWorktrees();
+          }}><GitBranch size={16} /></button>
         <button
           className="icon-btn"
           type="button"
@@ -7302,6 +7751,12 @@ function Switcher({
           <RefreshCw size={16} />
         </button>
       </header>
+      {commandHeld && !spaceReorderMode ? <div className="shortcut-peek" aria-hidden="true">
+        <div className="shortcut-peek-title">Keyboard shortcuts</div>
+        {shortcutPeek.map(([label, keys]) => <div className="shortcut-peek-row" key={label}>
+          <span>{label}</span><kbd>{keys}</kbd>
+        </div>)}
+      </div> : null}
 
       <div className="sidebar-scope host-scope" role="group" aria-label="Host">
         {bridgeViews.map((view) => (
@@ -7367,6 +7822,7 @@ function Switcher({
           type="button"
           data-on={scope === "space"}
           aria-pressed={scope === "space"}
+          title="Space (workspace): a project container for tabs and terminal panes"
           onClick={() => onScope("space")}
         >
           Space
@@ -8826,6 +9282,7 @@ function GroupHeader({
     <button
       className="grp-space"
       type="button"
+      data-sidebar-nav-row=""
       data-group-header="true"
       data-nested={nested ? "true" : undefined}
       aria-expanded={!collapsed}
@@ -8914,10 +9371,12 @@ function SpaceRow({
         ref={reorderCardRef}
         className="space-row"
         type="button"
+        data-sidebar-nav-row=""
         data-active={active}
         data-reorder-drag={reorderSource ? "true" : undefined}
         disabled={reorderSource && reorderBusy}
         aria-label={reorderSource ? `Move ${workspace.label}` : undefined}
+        title={`${workspace.label} — Space (workspace): a project container for tabs and terminal panes`}
         aria-describedby={reorderSource ? SPACE_REORDER_INSTRUCTIONS_ID : undefined}
         style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
         {...(reorderSource
@@ -8960,18 +9419,21 @@ function SpaceRow({
 function TabDivider({
   label,
   count,
+  shortcutNumber,
   onSelect,
   onMenu,
 }: {
   label: string;
   count: number;
+  shortcutNumber: number | null;
   onSelect: () => void;
   onMenu: (x: number, y: number) => void;
 }) {
   const press = useLongPress(onMenu, onSelect);
   return (
     <div className="tab-div">
-      <button type="button" className="tab-head" {...press}>
+      <button type="button" className="tab-head" data-sidebar-nav-row="" {...press}>
+        {shortcutNumber ? <ShortcutBadge number={shortcutNumber} /> : null}
         <span className="tab-name">{label}</span>
         {count > 1 ? (
           <span className="tab-split mono">
@@ -8985,6 +9447,10 @@ function TabDivider({
   );
 }
 
+function ShortcutBadge({ number }: { number: number }) {
+  return <span className="sidebar-tab-shortcut mono" aria-hidden="true">{number}</span>;
+}
+
 function PaneRow({
   pane,
   workspaceLabel,
@@ -8992,6 +9458,7 @@ function PaneRow({
   bridgeLabel,
   pinned,
   active,
+  shortcutNumber,
   index,
   onSelect,
   onMenu,
@@ -9002,6 +9469,7 @@ function PaneRow({
   bridgeLabel?: string;
   pinned?: boolean;
   active: boolean;
+  shortcutNumber?: number | null;
   index: number;
   onSelect: () => void;
   onMenu: (x: number, y: number) => void;
@@ -9015,6 +9483,7 @@ function PaneRow({
     <button
       className="pane-row"
       type="button"
+      data-sidebar-nav-row=""
       data-active={active}
       data-status={pane.agent_status}
       style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
@@ -9023,6 +9492,7 @@ function PaneRow({
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
         <span className="pane-name pane-title">
+          {shortcutNumber ? <ShortcutBadge number={shortcutNumber} /> : null}
           <span className="pane-title-text">{paneTitle(pane)}</span>
         </span>
         {meta ? <span className="pane-meta mono">{meta}</span> : null}
@@ -9046,6 +9516,7 @@ function AgentRow({
   bridgeLabel,
   pinned,
   active,
+  shortcutNumber,
   index,
   onSelect,
   onMenu,
@@ -9056,6 +9527,7 @@ function AgentRow({
   bridgeLabel?: string;
   pinned: boolean;
   active: boolean;
+  shortcutNumber?: number | null;
   index: number;
   onSelect: () => void;
   onMenu: (x: number, y: number) => void;
@@ -9066,6 +9538,7 @@ function AgentRow({
     <button
       className="pane-row agent-row"
       type="button"
+      data-sidebar-nav-row=""
       data-active={active}
       data-status={pane.agent_status}
       style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
@@ -9074,6 +9547,7 @@ function AgentRow({
       <span className="dot" data-status={pane.agent_status} />
       <span className="pane-body">
         <span className="pane-name pane-title">
+          {shortcutNumber ? <ShortcutBadge number={shortcutNumber} /> : null}
           {iconKind ? <AgentIcon kind={iconKind} /> : null}
           {pinned ? (
             <Pin className="agent-pin-indicator" size={10} aria-label="Pinned" />
@@ -9109,6 +9583,7 @@ function NoteRow({
     <button
       className="pane-row note-row"
       type="button"
+      data-sidebar-nav-row=""
       data-active={active}
       data-link={entry.note.link_state}
       style={{ animationDelay: `${Math.min(index, 14) * 22}ms` }}
@@ -9140,7 +9615,7 @@ function DisconnectedBridgeRow({
   onRetry: () => void;
 }) {
   return (
-    <button className="pane-row" type="button" data-status="unknown" onClick={onSelect}>
+    <button className="pane-row" type="button" data-sidebar-nav-row="" data-status="unknown" onClick={onSelect}>
       <span className="dot" data-status="unknown" />
       <span className="pane-body">
         <span className="pane-name">{label}</span>
@@ -9485,6 +9960,7 @@ export function menuItems(
   pinLabel: "agent" | "pane" = "pane",
   notesSupported = false,
   workspaceReorderSupported = false,
+  paneToolsSupported = false,
 ): MenuItem[] {
   if (kind === "space") {
     if (!commandsReady) {
@@ -9524,6 +10000,7 @@ export function menuItems(
     return paneItems;
   }
   paneItems.push({ key: "rename", label: "Rename" });
+  if (paneToolsSupported) paneItems.push({ key: "tools", label: "Pane tools" });
   if (paneMoveSupported) {
     paneItems.push(
       { key: "move_new_tab", label: "Move to new tab" },

@@ -6,6 +6,31 @@
 
 ### Added
 
+- Add a loopback-only Machines dialog for remote health, SSH-agent diagnosis, logs, browser-profile
+  setup, tunnel and bridge repair, and saved-machine management. Include read-only Herdr session,
+  integration, configuration, and version diagnostics.
+
+- Add pane tools for zoom, resize, swap, moving to an existing tab, process details, and agent
+  explanation/prompt, plus a guided Worktrees dialog. Commands appear only when the connected
+  bridge advertises support.
+
+- Allow explicit `remote-setup.mjs setup --source HOST` installs and `--force --source HOST`
+  upgrades from committed bridge source when a remote needs commands newer than the pinned release.
+
+- Add a searchable command palette for cross-host navigation and common actions, keyboard
+  shortcut help (⌘/), on-hold shortcut hints, arrow-key movement through sidebar rows, and a
+  Space/workspace tooltip.
+
+- Add Cmd+1–9 shortcuts to select tabs across all hosts in host, workspace, and tab order,
+  with Cmd+Option+number as a fallback when the browser reserves numbered tab keys. Holding Cmd
+  reveals the shortcut numbers beside visible sidebar tabs.
+
+- Alert on new blocked-agent transitions when desktop notifications are enabled, with optional
+  sound, cross-tab deduplication, click-through to the pane, and a persistent Needs attention list.
+
+- Add selectable Solarized Dark and Catppuccin themes for the app and terminal, plus system,
+  Menlo, and bundled JetBrains Mono font choices in terminal settings.
+
 - Add macOS remote setup scripts with supervised Linux bridges, reconnecting SSH tunnels,
   a local gateway, and a browser page for merging saved bridge profiles.
 
@@ -15,6 +40,8 @@
 
 ### Changed
 
+- Label the same-origin bridge "Localhost" when the web app is served from a loopback address.
+
 - Automatically increment Android `versionCode` and stamp `versionName` in the tagged release
   commit, keeping repeated builds of that release on the same Android version.
   [PR #91](https://github.com/kcosr/herdr-web/pull/91).
@@ -23,6 +50,15 @@
   [Will Hampson (@Whamp)](https://github.com/Whamp).
 
 ### Fixed
+
+- Keep the keyboard-selected command palette result visible while moving through long lists,
+  without a stationary pointer resetting the selection as the list scrolls.
+
+- Keep the sidebar header controls from overlapping at narrow widths by showing the logo and
+  status indicator without the wordmark; move the summary into the logo tooltip.
+
+- Keep a remote bridge's gateway URL and tunnel port when Herdr recreates a saved machine with a
+  new ID, and collapse duplicate entries for the same SSH host and session during setup.
 
 - Send protocol-level pings on idle browser WebSockets and close connections that do not return peer
   traffic within 15 seconds, removing dead transports without claiming to detect frozen JavaScript.

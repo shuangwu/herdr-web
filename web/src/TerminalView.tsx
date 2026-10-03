@@ -56,7 +56,8 @@ import {
   isTerminalOutputGzipAcknowledgement,
   terminalOutputGzipSupported,
 } from "./terminalOutputEncoding";
-import { DEFAULT_TERMINAL_FONT_SIZE_PX } from "./terminalPrefs";
+import { DEFAULT_TERMINAL_FONT, DEFAULT_TERMINAL_FONT_SIZE_PX, DEFAULT_TERMINAL_THEME } from "./terminalPrefs";
+import type { TerminalFont, TerminalTheme } from "./terminalPrefs";
 import {
   TERMINAL_FOREGROUND_FAST_ATTEMPTS,
   TERMINAL_FOREGROUND_CONNECT_TIMEOUT_MS,
@@ -100,6 +101,8 @@ type Props = {
   cursorBlink?: boolean;
   /** Terminal renderer font size in CSS pixels. */
   terminalFontSizePx?: number;
+  terminalFont?: TerminalFont;
+  terminalTheme?: TerminalTheme;
   /** Percentage scale applied to mobile terminal controls. */
   mobileControlsScalePercent?: number;
   /** Where terminal taps should send focus on mobile. */
@@ -182,6 +185,8 @@ export function TerminalView({
   desktopCommandEnterNewline = true,
   cursorBlink = true,
   terminalFontSizePx = DEFAULT_TERMINAL_FONT_SIZE_PX,
+  terminalFont = DEFAULT_TERMINAL_FONT,
+  terminalTheme = DEFAULT_TERMINAL_THEME,
   mobileControlsScalePercent = 100,
   mobileTapTarget = "command-input",
   mobileLongPressBehavior = "off",
@@ -529,6 +534,8 @@ export function TerminalView({
     const generation = rendererGenerationRef.current + 1;
     rendererGenerationRef.current = generation;
     const renderer = createTerminalRenderer(terminalFontSizePxRef.current, cursorBlink);
+    renderer.setFont(terminalFont);
+    renderer.setTheme(terminalTheme);
     rendererRef.current = renderer;
     setConnectionState("connecting");
 
@@ -1186,6 +1193,15 @@ export function TerminalView({
       sendResizeRef.current(size);
     }
   }, [terminalFontSizePx]);
+
+  useEffect(() => {
+    const size = rendererRef.current?.setFont(terminalFont);
+    if (size) sendResizeRef.current(size);
+  }, [terminalFont]);
+
+  useEffect(() => {
+    rendererRef.current?.setTheme(terminalTheme);
+  }, [terminalTheme]);
 
   useEffect(() => {
     setMobileSelectionAction(null);

@@ -2,12 +2,14 @@ import http from "node:http";
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { createMachineManager } from "./machine-management.mjs";
 
 // Keep browser storage and all HTTP/WebSocket traffic on a stable local origin.
 export function destination(url, config) {
   const path = url.split("?")[0];
   if (!path.startsWith("/bridges/")) return { port: config.bridgePort, path: url };
   for (const remote of config.remotes) {
+    if (remote.enabled === false) continue;
     const prefix = `/bridges/${remote.id}`;
     if (path === prefix || path.startsWith(`${prefix}/`)) {
       return { port: remote.localPort, path: url.slice(prefix.length) || "/" };
@@ -29,14 +31,42 @@ export function mergeProfiles(existing, profiles) {
   return store;
 }
 
-export function createGateway(config) {
-  const server = http.createServer((req, res) => {
+export function createGateway(config, manager = null) {
+  const server = http.createServer(async (req, res) => {
     if (req.headers.host !== `127.0.0.1:${config.port}` && req.headers.host !== `localhost:${config.port}`) {
       res.writeHead(403).end("Unexpected host"); return;
     }
+    if (req.url === "/_local/machines") {
+      if (!manager) { res.writeHead(404).end("Machine management is unavailable here"); return; }
+      const expectedOrigin = `http://${req.headers.host}`;
+      if (req.headers.origin && req.headers.origin !== expectedOrigin) { res.writeHead(403).end("Unexpected origin"); return; }
+      res.setHeader("content-type", "application/json; charset=utf-8");
+      res.setHeader("cache-control", "no-store");
+      try {
+        if (req.method === "GET") {
+          res.end(JSON.stringify(await manager.snapshot()));
+        } else if (req.method === "POST") {
+          if (req.headers.origin !== expectedOrigin || !req.headers["content-type"]?.startsWith("application/json")) {
+            res.writeHead(403).end(JSON.stringify({ error: "Origin and JSON content type are required" })); return;
+          }
+          let body = "";
+          for await (const chunk of req) {
+            body += chunk;
+            if (body.length > 16_384) { res.writeHead(413).end(JSON.stringify({ error: "Request too large" })); return; }
+          }
+          res.end(JSON.stringify(await manager.action(JSON.parse(body))));
+        } else {
+          res.writeHead(405, { allow: "GET, POST" }).end(JSON.stringify({ error: "Method not allowed" }));
+        }
+      } catch (error) {
+        res.writeHead(error instanceof SyntaxError ? 400 : 500).end(JSON.stringify({ error: error.message }));
+      }
+      return;
+    }
+    const currentConfig = manager ? await manager.readConfig().catch(() => config) : config;
     if (req.url === "/setup") {
       const nonce = randomBytes(20).toString("base64");
-      const profiles = config.remotes.map(({ id, name }) => ({ id: `remote-${id}`, name, baseUrl: `http://${req.headers.host}/bridges/${id}` }));
+      const profiles = currentConfig.remotes.filter((remote) => remote.enabled !== false).map(({ id, name }) => ({ id: `remote-${id}`, name, baseUrl: `http://${req.headers.host}/bridges/${id}` }));
       const data = JSON.stringify(profiles).replaceAll("<", "\\u003c");
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'` });
       res.end(`<!doctype html><title>Connect Herdr bridges</title><p id="status">Saving bridge settings…</p><script nonce="${nonce}">
@@ -49,10 +79,10 @@ export function createGateway(config) {
       </script>`);
       return;
     }
-    const target = destination(req.url, config);
+    const target = destination(req.url, currentConfig);
     if (!target) { res.writeHead(404).end("Unknown bridge"); return; }
     const upstream = http.request({ hostname: "127.0.0.1", port: target.port, path: target.path, method: req.method,
-      headers: { ...req.headers, host: `127.0.0.1:${config.bridgePort}` } }, (response) => {
+      headers: { ...req.headers, host: `127.0.0.1:${currentConfig.bridgePort}` } }, (response) => {
       res.writeHead(response.statusCode, response.headers);
       response.pipe(res);
     });
@@ -61,12 +91,13 @@ export function createGateway(config) {
     res.on("close", () => upstream.destroy());
     req.pipe(upstream);
   });
-  server.on("upgrade", (req, socket, head) => {
+  server.on("upgrade", async (req, socket, head) => {
     if (![ `127.0.0.1:${config.port}`, `localhost:${config.port}` ].includes(req.headers.host)) { socket.destroy(); return; }
-    const target = destination(req.url, config);
+    const currentConfig = manager ? await manager.readConfig().catch(() => config) : config;
+    const target = destination(req.url, currentConfig);
     if (!target) { socket.destroy(); return; }
     const upstream = http.request({ hostname: "127.0.0.1", port: target.port, path: target.path,
-      headers: { ...req.headers, host: `127.0.0.1:${config.bridgePort}` } });
+      headers: { ...req.headers, host: `127.0.0.1:${currentConfig.bridgePort}` } });
     upstream.setTimeout(15_000, () => upstream.destroy());
     upstream.on("upgrade", (response, peer, upstreamHead) => {
       upstream.setTimeout(0);
@@ -91,6 +122,6 @@ export function createGateway(config) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const config = JSON.parse(await readFile(process.argv[2], "utf8"));
-  const server = createGateway(config);
+  const server = createGateway(config, createMachineManager(process.argv[2]));
   server.listen(config.port, "127.0.0.1", () => console.log(`Herdr web: http://127.0.0.1:${config.port}`));
 }

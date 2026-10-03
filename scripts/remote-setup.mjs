@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { mergeRemoteConfig } from "./remote-config.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HOME_DIR = os.homedir();
@@ -20,7 +21,8 @@ const PREFIX = "local.herdr-web";
 const args = process.argv.slice(2);
 const command = args.shift() ?? "status";
 const force = args.includes("--force");
-const selected = args.filter((arg) => arg !== "--force");
+const source = args.includes("--source");
+const selected = args.filter((arg) => arg !== "--force" && arg !== "--source");
 const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
 const xml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
@@ -33,7 +35,7 @@ function jobs(cfg) {
   return [
     { label: `${PREFIX}.bridge`, argv: [path.join(ROOT, "bridge/target/debug/herdr-web-bridge"), "--host", "127.0.0.1", "--port", "8787", "--static-dir", path.join(ROOT, "web/dist")], env: { HERDR_SOCKET_PATH: path.join(HOME_DIR, ".config/herdr/herdr.sock") } },
     { label: `${PREFIX}.gateway`, argv: [process.execPath, path.join(ROOT, "scripts/remote-gateway.mjs"), CONFIG] },
-    ...cfg.remotes.map((remote) => ({ label: `${PREFIX}.tunnel.${remote.id}`, argv: ["/usr/bin/ssh", ...SSH, "-N", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectionAttempts=1", "-L", `127.0.0.1:${remote.localPort}:127.0.0.1:8787`, remote.host] })),
+    ...cfg.remotes.filter((remote) => remote.enabled !== false).map((remote) => ({ label: `${PREFIX}.tunnel.${remote.id}`, argv: ["/usr/bin/ssh", ...SSH, "-N", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-o", "ExitOnForwardFailure=yes", "-o", "ConnectionAttempts=1", "-L", `127.0.0.1:${remote.localPort}:127.0.0.1:8787`, remote.host] })),
   ];
 }
 function stopJob(label) {
@@ -92,18 +94,7 @@ async function setup() {
   for (const host of selected) if (!machines.some((m) => m.host === host)) throw new Error("Unknown enabled SSH machine: " + host);
   const targets = machines.filter((m) => selected.length === 0 || selected.includes(m.host));
   if (!targets.length) throw new Error("No enabled saved SSH machines");
-  const cfg = { port: 5173, bridgePort: 8787, remotes: [...previous.remotes] };
-  const usedPorts = new Set(cfg.remotes.map((r) => r.localPort));
-  for (const target of targets) {
-    const existing = cfg.remotes.find((r) => r.id === target.id);
-    if (existing) Object.assign(existing, target);
-    else {
-      let localPort = 8791;
-      while (usedPorts.has(localPort)) localPort++;
-      usedPorts.add(localPort);
-      cfg.remotes.push({ ...target, localPort });
-    }
-  }
+  const cfg = mergeRemoteConfig(previous, targets);
   const cache = path.join(ROOT, ".scratch/remote-setup"); mkdirSync(cache, { recursive: true });
   const filename = `herdr-web-${VERSION}-linux-x86_64.tar.gz`;
   for (const asset of [filename, filename + ".sha256"]) {
@@ -124,7 +115,7 @@ async function setup() {
     run("/usr/bin/scp", ["-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", path.join(cache, filename), `${remote.host}:${archive}`]);
     const sourceArchive = `.cache/herdr-web-remote/${sourceName}`;
     run("/usr/bin/scp", ["-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", path.join(cache, sourceName), `${remote.host}:${sourceArchive}`]);
-    const payload = Buffer.from(JSON.stringify({ version: VERSION, archive, sha256, force, session: remote.session, sourceArchive, sourceRevision, sourceSha256 })).toString("base64");
+    const payload = Buffer.from(JSON.stringify({ version: VERSION, archive, sha256, force, source, session: remote.session, sourceArchive, sourceRevision, sourceSha256 })).toString("base64");
     run("/usr/bin/ssh", [...SSH, remote.host, `python3 - ${quote(payload)}`], { input: readFileSync(path.join(ROOT, "scripts/remote-install.py"), "utf8"), stdio: ["pipe", "inherit", "inherit"] });
   }
   mkdirSync(STATE, { recursive: true });
@@ -143,7 +134,7 @@ async function setup() {
 try {
   if (process.platform !== "darwin") throw new Error("This controller requires macOS; remote hosts must be Linux x86_64.");
   if (selected.some((arg) => arg.startsWith("-"))) throw new Error("Unknown option");
-  if (force && command !== "setup") throw new Error("--force is only valid with setup");
+  if ((force || source) && command !== "setup") throw new Error("--force and --source are only valid with setup");
   if (selected.length && command !== "setup") throw new Error("Host selection is only valid with setup");
   switch (command) {
     case "setup": await setup(); break;
@@ -151,7 +142,7 @@ try {
     case "stop": for (const job of jobs(config()).reverse()) stopJob(job.label); break;
     case "status": if (!await status(config())) process.exitCode = 1; break;
     case "help": case "--help":
-      console.log("Usage: node scripts/remote-setup.mjs setup [--force] [SSH_ALIAS ...] | start | stop | status\nsetup provisions enabled Herdr machines, user services, and login agents. --force replaces all your bridges on selected remotes. stop unloads local jobs for this login; plist files remain for the next login."); break;
+      console.log("Usage: node scripts/remote-setup.mjs setup [--force] [--source] [SSH_ALIAS ...] | start | stop | status\nsetup provisions enabled Herdr machines, user services, and login agents. --force replaces all your bridges on selected remotes. --source builds the committed bridge source on Linux; replacing a running bridge also requires --force. stop unloads local jobs for this login; plist files remain for the next login."); break;
     default: throw new Error("Unknown command; use help");
   }
 } catch (error) { console.error(error.message); process.exitCode = 1; }

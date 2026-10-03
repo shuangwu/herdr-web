@@ -9,7 +9,7 @@
     "build:web": "npm run build --prefix web",
     "test:dev": "node --test scripts/dev.test.mjs",
     "test:release": "node --test scripts/release.test.mjs",
-    "test:remote": "node --test scripts/remote-gateway.test.mjs",
+    "test:remote": "node --test scripts/remote-gateway.test.mjs scripts/remote-config.test.mjs scripts/machine-management.test.mjs",
     "remote": "node scripts/remote-setup.mjs",
     "test:web": "npm run test --prefix web",
     "lint:web": "npm run lint --prefix web",

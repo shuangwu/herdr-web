@@ -61,6 +61,10 @@ class FakeTerminalRenderer implements TerminalRenderer {
     return null;
   }
 
+  setFont() { return null; }
+
+  setTheme() {}
+
   focus() {}
 
   focusTextInput() {}

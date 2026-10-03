@@ -1444,7 +1444,7 @@ fn is_direct_child(parent: &Path, child: &Path) -> bool {
 
 /// Mutating methods the browser client is allowed to invoke. Anything outside
 /// this list (e.g. `server.stop`, `pane.send_keys`) is rejected so the bridge
-/// only exposes the workspace/tab/pane lifecycle the UI needs.
+/// only exposes the narrow browser actions the UI needs.
 const ALLOWED_COMMANDS: &[&str] = &[
     "workspace.create",
     "workspace.rename",
@@ -1462,8 +1462,18 @@ const ALLOWED_COMMANDS: &[&str] = &[
     "pane.split",
     // Directional pane focus: explicit pane_id only, matching the web selection.
     "pane.focus_direction",
-    // Narrow live pane moves: new tab or new workspace destinations only.
+    // Narrow live pane moves to a new tab, new workspace, or explicit existing tab.
     "pane.move",
+    "pane.zoom",
+    "pane.resize",
+    "pane.swap",
+    "pane.process_info",
+    "agent.explain",
+    "agent.prompt",
+    "worktree.list",
+    "worktree.create",
+    "worktree.open",
+    "worktree.remove",
 ];
 
 fn ensure_allowed_request(headers: &HeaderMap, policy: &RequestPolicy) -> Result<(), BridgeError> {
@@ -1814,11 +1824,153 @@ fn validate_web_command(method: &Method) -> Result<(), BridgeError> {
                     validate_optional_label(label, "pane.move new_workspace label")?;
                     validate_optional_label(tab_label, "pane.move new_workspace tab_label")?;
                 }
-                PaneMoveDestination::Tab { .. } => {
-                    return Err(BridgeError::BadRequest(
-                        "pane.move to existing tabs is not exposed through herdr-web".to_string(),
-                    ));
+                PaneMoveDestination::Tab {
+                    tab_id,
+                    target_pane_id,
+                    ratio,
+                    ..
+                } => {
+                    if tab_id.trim().is_empty()
+                        || target_pane_id
+                            .as_deref()
+                            .is_none_or(|pane_id| pane_id.trim().is_empty())
+                        || ratio.is_some()
+                    {
+                        return Err(BridgeError::BadRequest(
+                            "pane.move to an existing tab requires tab_id and target_pane_id without a ratio".to_string(),
+                        ));
+                    }
                 }
+            }
+        }
+        Method::PaneZoom(params) => {
+            if params
+                .pane_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+            {
+                return Err(BridgeError::BadRequest(
+                    "pane.zoom requires pane_id".to_string(),
+                ));
+            }
+        }
+        Method::PaneResize(params) => {
+            if params
+                .pane_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+                || params
+                    .amount
+                    .is_some_and(|amount| !amount.is_finite() || amount <= 0.0 || amount > 20.0)
+            {
+                return Err(BridgeError::BadRequest(
+                    "pane.resize requires pane_id and amount from 0 to 20".to_string(),
+                ));
+            }
+        }
+        Method::PaneSwap(params) => {
+            if params.pane_id.is_some()
+                || params.direction.is_some()
+                || params
+                    .source_pane_id
+                    .as_deref()
+                    .is_none_or(|id| id.trim().is_empty())
+                || params
+                    .target_pane_id
+                    .as_deref()
+                    .is_none_or(|id| id.trim().is_empty())
+                || params.source_pane_id == params.target_pane_id
+            {
+                return Err(BridgeError::BadRequest(
+                    "pane.swap requires two distinct explicit pane IDs".to_string(),
+                ));
+            }
+        }
+        Method::PaneProcessInfo(params) => {
+            if params
+                .pane_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+            {
+                return Err(BridgeError::BadRequest(
+                    "pane.process_info requires pane_id".to_string(),
+                ));
+            }
+        }
+        Method::AgentExplain(params) => {
+            if params.target.trim().is_empty() || params.target.len() > 256 {
+                return Err(BridgeError::BadRequest(
+                    "agent.explain requires a valid target".to_string(),
+                ));
+            }
+        }
+        Method::AgentPrompt(params) => {
+            if params.target.trim().is_empty()
+                || params.target.len() > 256
+                || params.text.trim().is_empty()
+                || params.text.len() > 16_384
+                || params.wait.is_some()
+            {
+                return Err(BridgeError::BadRequest(
+                    "agent.prompt requires a target and nonempty text without wait".to_string(),
+                ));
+            }
+        }
+        Method::WorktreeList(params) => {
+            if params
+                .workspace_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+                || params.cwd.is_some()
+                || params.trust_repository
+            {
+                return Err(BridgeError::BadRequest(
+                    "worktree.list requires workspace_id".to_string(),
+                ));
+            }
+        }
+        Method::WorktreeCreate(params) => {
+            if params
+                .workspace_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+                || params.cwd.is_some()
+                || params.trust_repository
+                || !params.focus
+                || params
+                    .branch
+                    .as_deref()
+                    .is_none_or(|branch| branch.trim().is_empty() || branch.len() > 120)
+            {
+                return Err(BridgeError::BadRequest(
+                    "worktree.create requires workspace_id, branch, and focus".to_string(),
+                ));
+            }
+        }
+        Method::WorktreeOpen(params) => {
+            if params
+                .workspace_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+                || params.cwd.is_some()
+                || params.trust_repository
+                || !params.focus
+                || params
+                    .path
+                    .as_deref()
+                    .is_none_or(|path| path.trim().is_empty())
+                || params.branch.is_some()
+            {
+                return Err(BridgeError::BadRequest(
+                    "worktree.open requires workspace_id and path".to_string(),
+                ));
+            }
+        }
+        Method::WorktreeRemove(params) => {
+            if params.workspace_id.trim().is_empty() || params.force || params.trust_repository {
+                return Err(BridgeError::BadRequest(
+                    "worktree.remove requires workspace_id without force".to_string(),
+                ));
             }
         }
         Method::PaneRename(params) => {
@@ -6550,6 +6702,18 @@ mod tests {
                     "target_pane_id": "w1:p2",
                     "split": "right"
                 },
+                "focus": true
+            }
+        }))
+        .unwrap();
+        assert!(validate_web_command(&request.method).is_ok());
+
+        let request: Request = serde_json::from_value(serde_json::json!({
+            "id": "test",
+            "method": "pane.move",
+            "params": {
+                "pane_id": "w1:p1",
+                "destination": { "type": "tab", "tab_id": "w1:t2", "split": "right" },
                 "focus": true
             }
         }))

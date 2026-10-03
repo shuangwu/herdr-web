@@ -59,3 +59,30 @@ test("gateway routes HTTP and WebSockets and recovers when the upstream returns"
   upstream.listen(upstreamPort, "127.0.0.1"); await once(upstream, "listening");
   assert.equal((await fetch(base + "/bridges/a/api/capabilities")).status, 200);
 });
+
+test("machine API is local-only and requires the exact origin for changes", async (t) => {
+  const calls = [];
+  const config = { port: 0, bridgePort: 8787, remotes: [] };
+  const manager = {
+    readConfig: async () => config,
+    snapshot: async () => ({ available: true, machines: [] }),
+    action: async (body) => { calls.push(body); return { message: "done" }; },
+  };
+  const gateway = createGateway(config, manager);
+  config.port = await listen(gateway);
+  t.after(() => { gateway.closeAllConnections(); gateway.close(); });
+  const base = `http://127.0.0.1:${config.port}`;
+  assert.equal((await fetch(base + "/_local/machines")).status, 200);
+  const denied = await fetch(base + "/_local/machines", {
+    method: "POST", headers: { origin: "https://attacker.example", "content-type": "application/json" },
+    body: JSON.stringify({ action: "restartTunnel", id: "12345678" }),
+  });
+  assert.equal(denied.status, 403);
+  assert.equal(calls.length, 0);
+  const accepted = await fetch(base + "/_local/machines", {
+    method: "POST", headers: { origin: base, "content-type": "application/json" },
+    body: JSON.stringify({ action: "restartTunnel", id: "12345678" }),
+  });
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(calls, [{ action: "restartTunnel", id: "12345678" }]);
+});

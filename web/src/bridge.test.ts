@@ -15,6 +15,7 @@ import {
   probeBridgeBaseUrl,
   removeNoteDraftsForBridgeConnection,
   SAME_ORIGIN_BRIDGE_ID,
+  sameOriginBridgeLabel,
 } from "./bridge";
 
 afterEach(() => {
@@ -22,6 +23,13 @@ afterEach(() => {
 });
 
 describe("bridge URL normalization", () => {
+  it("calls loopback's same-origin bridge Localhost", () => {
+    expect(sameOriginBridgeLabel("127.0.0.1")).toBe("Localhost");
+    expect(sameOriginBridgeLabel("localhost")).toBe("Localhost");
+    expect(sameOriginBridgeLabel("[::1]")).toBe("Localhost");
+    expect(sameOriginBridgeLabel("herdr.example")).toBe("Same origin");
+  });
+
   it("normalizes origin-only bridge URLs", () => {
     expect(normalizeBridgeBaseUrl("192.168.1.20:4000")).toBe("http://192.168.1.20:4000");
     expect(normalizeBridgeBaseUrl(" http://herdr-host.local:4000/ ")).toBe(
