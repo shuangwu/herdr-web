@@ -6,6 +6,7 @@ const shortcuts = [
   ["Open command palette", "⌘K"],
   ["Show shortcut help", "⌘/"],
   ["Move through sidebar rows / open / return to terminal", "↑↓ / Enter / Esc"],
+  ["Open sidebar row actions", "⇧F10 / Menu"],
   ["Switch to visible tab 1–9 across hosts", "⌘1–9"],
   ["Alternate tab selection when browser reserves ⌘1–9", "⌘⌥1–9"],
   ["Move through tabs", "⌘⇧← / →"],

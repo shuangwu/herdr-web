@@ -391,6 +391,8 @@ new-tab and close bindings remain available; `Cmd/Option+Shift+-` splits right d
 The new-tab and new-pane shortcuts open the launcher so you can choose a shell or agent preset.
 Within the sidebar, use Up/Down to move between rows, Enter to select, Shift+F10 or the Menu key
 for row actions, and Escape to return to the terminal. Dialogs and menus support Tab and Escape.
+The command palette shows shortcuts beside actions and numbered tabs when available; search for
+"Focus sidebar rows" to reach row actions from the terminal without tabbing through the toolbar.
 
 Numbered tabs follow enabled host order, then workspace number, then tab number. They ignore the
 sidebar's current host, workspace, sort, and collapse filters. `Cmd+Option+1` … `Cmd+Option+9`

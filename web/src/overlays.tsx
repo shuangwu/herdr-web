@@ -7,7 +7,7 @@ import {
   useFocusReturn,
 } from "./overlayFocus";
 
-export type MenuItem = { key: string; label: string; danger?: boolean };
+export type MenuItem = { key: string; label: string; danger?: boolean; shortcut?: string };
 
 /**
  * Long-press (touch / mouse-hold) and right-click both open a context menu;
@@ -248,7 +248,8 @@ export function ActionMenu({
             onFocus={() => setFocusedIndex(index)}
             onClick={() => onPick(item.key)}
           >
-            {item.label}
+            <span>{item.label}</span>
+            {item.shortcut ? <kbd className="menu-shortcut">{item.shortcut}</kbd> : null}
           </button>
         ))}
       </div>

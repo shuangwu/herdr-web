@@ -19,6 +19,9 @@ export function WorktreesDialog({ runtime, workspace, busy, onRun, onClose }: {
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const removeCancelRef = useRef<HTMLButtonElement>(null);
+  const removeTriggerRef = useRef<HTMLButtonElement>(null);
+  const restoreRemoveFocusRef = useRef(false);
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   const [source, setSource] = useState<Source | null>(null);
   const [branch, setBranch] = useState("");
@@ -31,6 +34,15 @@ export function WorktreesDialog({ runtime, workspace, busy, onRun, onClose }: {
   const supported = new Set(runtime.capabilities?.commands ?? []);
   useFocusReturn();
   useEffect(() => closeRef.current?.focus(), []);
+  useEffect(() => {
+    if (remove) removeCancelRef.current?.focus();
+    else if (restoreRemoveFocusRef.current) {
+      restoreRemoveFocusRef.current = false;
+      (removeTriggerRef.current?.isConnected ? removeTriggerRef.current : closeRef.current)?.focus();
+    }
+  }, [remove]);
+
+  const cancelRemove = () => { restoreRemoveFocusRef.current = true; setRemove(null); };
 
   const refresh = async () => {
     setLoading(true);
@@ -58,7 +70,7 @@ export function WorktreesDialog({ runtime, workspace, busy, onRun, onClose }: {
     });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape" && !busy && !loading) { event.preventDefault(); if (remove) setRemove(null); else onClose(); }
+    if (event.key === "Escape" && !busy && !loading) { event.preventDefault(); if (remove) cancelRemove(); else onClose(); }
     else trapFocusWithin(event);
   };
   return <div className="overlay-root">
@@ -74,7 +86,7 @@ export function WorktreesDialog({ runtime, workspace, busy, onRun, onClose }: {
           {item.is_prunable ? <small>Prunable</small> : null}</div>
         {supported.has("worktree.open") && !item.open_workspace_id ? <button className="btn" type="button" disabled={busy} onClick={() => void mutate(() => commands.openWorktree(workspace.workspace_id, item.path), true)}>Open Space</button> : null}
         {item.open_workspace_id ? <small>Open as {item.open_workspace_id}</small> : null}
-        {supported.has("worktree.remove") && item.open_workspace_id && item.is_linked_worktree ? <button className="btn" type="button" disabled={busy} onClick={() => setRemove(item)}>Remove…</button> : null}
+        {supported.has("worktree.remove") && item.open_workspace_id && item.is_linked_worktree ? <button className="btn" type="button" disabled={busy} onClick={(event) => { removeTriggerRef.current = event.currentTarget; setRemove(item); }}>Remove…</button> : null}
       </div>)}</div>
       {worktrees.length === 0 && !loading ? <p className="palette-hint">No worktrees found for this repository.</p> : null}
       {supported.has("worktree.create") ? <form className="worktree-create" onSubmit={submitCreate}>
@@ -89,9 +101,9 @@ export function WorktreesDialog({ runtime, workspace, busy, onRun, onClose }: {
         <p>Remove the linked worktree at <strong>{remove.path}</strong>? Herdr will close its Space. Review any uncommitted files before proceeding.</p>
         <button className="btn" type="button" disabled={busy} onClick={() => {
           const id = remove.open_workspace_id;
-          if (id) void mutate(() => commands.removeWorktree(id)).then((ok) => { if (ok) setRemove(null); });
+          if (id) void mutate(() => commands.removeWorktree(id)).then((ok) => { if (ok) cancelRemove(); });
         }}>Remove worktree</button>
-        <button className="btn" type="button" onClick={() => setRemove(null)}>Cancel</button>
+        <button ref={removeCancelRef} className="btn" type="button" onClick={cancelRemove}>Cancel</button>
       </div> : null}
     </div>
   </div>;

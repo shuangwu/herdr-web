@@ -47,6 +47,7 @@ describe("ActionMenu", () => {
     );
     expect(requiredElement<HTMLButtonElement>(container, ".overlay-scrim").tabIndex).toBe(-1);
     expect(document.activeElement).toBe(items[0]);
+    expect(items[0].querySelector("kbd")?.textContent).toBe("⌘N");
 
     await press(items[0], "ArrowDown");
     expect(document.activeElement).toBe(items[1]);
@@ -208,7 +209,7 @@ describe("ConfirmDialog", () => {
 });
 
 const menuItems = [
-  { key: "rename", label: "Rename" },
+  { key: "rename", label: "Rename", shortcut: "⌘N" },
   { key: "duplicate", label: "Duplicate" },
   { key: "delete", label: "Delete", danger: true },
 ];

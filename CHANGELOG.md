@@ -6,6 +6,9 @@
 
 ### Added
 
+- Show available shortcuts beside command-palette results and context-menu actions, expose common
+  selected-item actions and sidebar focus in the palette, and show icon tooltips on keyboard focus.
+
 - Add Cmd+N for a new tab, Cmd+T for a new pane split to the right, and Cmd+W to close the
   selected pane (or its tab when it is the last pane); retain the earlier shifted shortcuts.
 
@@ -53,6 +56,10 @@
   [Will Hampson (@Whamp)](https://github.com/Whamp).
 
 ### Fixed
+
+- Close the new-tab or new-pane launcher when the creation request succeeds, without waiting for
+  the follow-up snapshot; improve Settings tab-key navigation, palette focus return, and Worktrees
+  removal-confirmation focus.
 
 - Keep the keyboard-selected command palette result visible while moving through long lists,
   without a stationary pointer resetting the selection as the list scrolls.

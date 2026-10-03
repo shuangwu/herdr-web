@@ -383,15 +383,26 @@ export function BackendSettingsDialog({
         <div id={titleId} className="modal-title">Settings</div>
         <div className="backend-layout">
           <div className="settings-area-list" role="tablist" aria-label="Settings areas">
-            {areas.map(({ id, label, icon: Icon }) => (
+            {areas.map(({ id, label, icon: Icon }, index) => (
               <button
                 key={id}
+                id={`${titleId}-${id}`}
                 className="settings-area-tab"
                 type="button"
                 role="tab"
                 data-active={activeArea === id ? "true" : undefined}
                 aria-selected={activeArea === id}
+                aria-controls={`${titleId}-panel`}
+                tabIndex={activeArea === id ? 0 : -1}
                 onClick={() => setActiveArea(id)}
+                onKeyDown={(event) => {
+                  if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+                  event.preventDefault();
+                  const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? areas.length - 1
+                    : (index + (event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1) + areas.length) % areas.length;
+                  setActiveArea(areas[nextIndex].id);
+                  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
+                }}
               >
                 <Icon size={15} />
                 <span>{label}</span>
@@ -399,7 +410,7 @@ export function BackendSettingsDialog({
             ))}
           </div>
 
-          <div className="settings-panel" role="tabpanel">
+          <div className="settings-panel" id={`${titleId}-panel`} role="tabpanel" aria-labelledby={`${titleId}-${activeArea}`}>
             {activeArea === "bridge" ? (
               <>
                 <div className="bridge-settings-grid">

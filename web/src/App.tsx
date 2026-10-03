@@ -73,6 +73,7 @@ import type { ActivityLogEntry } from "./activity";
 import { BackendSettingsDialog } from "./BackendSettingsDialog";
 import { CommandPalette } from "./CommandPalette";
 import type { PaletteEntry } from "./CommandPalette";
+import { FocusTooltip } from "./FocusTooltip";
 import { ShortcutHelp, shortcutPeek } from "./ShortcutHelp";
 import { blockedAttentionPanes, blockedPaneKey, diffBlockedPaneStatuses } from "./blockedAttention";
 import { armBlockedAlertSound, claimBlockedAlertAcrossTabs, clearBlockedAlertClaim, playBlockedAlertSound } from "./blockedNotifications";
@@ -3951,14 +3952,25 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
               launchTarget.direction,
               resolvedSpec,
             );
-    void exec(runtime, action, true).then((ok) => ok && setLaunchTarget(null));
+    const submittedTarget = launchTarget;
+    void exec(runtime, async () => {
+      const result = await action();
+      setLaunchTarget((current) => current === submittedTarget ? null : current);
+      return result;
+    }, true);
   };
 
   const paletteEntries: PaletteEntry[] = [
     { id: "action:settings", kind: "Action", label: "Open settings", onSelect: () => setBackendSettingsOpen(true) },
     { id: "action:machines", kind: "Action", label: "Manage machines", onSelect: () => setMachinesOpen(true) },
     { id: "action:refresh", kind: "Action", label: "Refresh bridges", onSelect: refreshNow },
-    { id: "action:shortcuts", kind: "Action", label: "Show keyboard shortcuts", onSelect: () => setShortcutHelpOpen(true) },
+    { id: "action:shortcuts", kind: "Action", label: "Show keyboard shortcuts", shortcut: "⌘/", onSelect: () => setShortcutHelpOpen(true) },
+    { id: "action:sidebar", kind: "Action", label: "Focus sidebar rows", onSelect: () => {
+      setSidebarOpen(true);
+      window.requestAnimationFrame(() => document.querySelector<HTMLElement>(
+        '.sidebar [data-sidebar-nav-row][data-active="true"], .sidebar [data-sidebar-nav-row], .sidebar button:not(:disabled)',
+      )?.focus());
+    } },
   ];
   if (selectedRuntime && selectedCommands && activeSpace) {
     if (selectedRuntime.capabilities?.commands.includes("worktree.list")) {
@@ -3975,9 +3987,59 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     });
     paletteEntries.push({
       id: "action:new-tab", kind: "Action", label: "Create tab",
+      shortcut: "⌘N",
       detail: `${selectedRuntime.label} · ${activeSpace.label}`,
       onSelect: () => setLaunchTarget({ mode: "tab", workspaceId: activeSpace.workspace_id, bridgeId: selectedRuntime.id }),
     });
+    paletteEntries.push({
+      id: "action:rename-space", kind: "Action", label: "Rename selected Space",
+      detail: `${selectedRuntime.label} · ${activeSpace.label}`,
+      onSelect: () => setDialog({ mode: "rename", kind: "space", bridgeId: selectedRuntime.id,
+        id: activeSpace.workspace_id, label: activeSpace.label }),
+    });
+  }
+  if (selectedRuntime && selectedPane) {
+    paletteEntries.push({
+      id: "action:rename-pane", kind: "Action", label: "Rename selected pane",
+      detail: `${selectedRuntime.label} · ${paneTitle(selectedPane)}`,
+      onSelect: () => setDialog({ mode: "rename", kind: "pane", bridgeId: selectedRuntime.id,
+        id: selectedPane.pane_id, label: paneTitle(selectedPane) }),
+    });
+  }
+  if (selectedRuntime && selectedPane && splitSupported) {
+    paletteEntries.push({
+      id: "action:new-pane", kind: "Action", label: "Create pane to the right",
+      shortcut: "⌘T",
+      detail: `${selectedRuntime.label} · ${paneTitle(selectedPane)}`,
+      onSelect: () => setLaunchTarget({ mode: "split", pane: selectedPane, direction: "right", bridgeId: selectedRuntime.id }),
+    });
+  }
+  if (selectedRuntime && snapshot) {
+    const tab = activeShortcutTab(snapshot, activeSpace, selectedPane);
+    if (tab) {
+      paletteEntries.push({
+        id: "action:rename-tab", kind: "Action", label: "Rename selected tab",
+        detail: `${selectedRuntime.label} · ${displayTabLabel(tab, snapshot.panes)}`,
+        onSelect: () => setDialog({ mode: "rename", kind: "tab", bridgeId: selectedRuntime.id,
+          id: tab.tab_id, label: displayTabLabel(tab, snapshot.panes) }),
+      });
+      const paneCount = sortPanesForTab(snapshot.panes, tab.tab_id).length;
+      if (paneCount > 1 && selectedPane?.tab_id === tab.tab_id) {
+        paletteEntries.push({
+          id: "action:close-pane", kind: "Action", label: "Close selected pane", shortcut: "⌘W",
+          detail: `${selectedRuntime.label} · ${paneTitle(selectedPane)}`,
+          onSelect: () => setDialog({ mode: "close", kind: "pane", bridgeId: selectedRuntime.id,
+            id: selectedPane.pane_id, label: paneTitle(selectedPane) }),
+        });
+      } else {
+        paletteEntries.push({
+          id: "action:close-tab", kind: "Action", label: "Close selected tab", shortcut: "⌘W",
+          detail: `${selectedRuntime.label} · ${displayTabLabel(tab, snapshot.panes)}`,
+          onSelect: () => setDialog({ mode: "close", kind: "tab", bridgeId: selectedRuntime.id,
+            id: tab.tab_id, label: displayTabLabel(tab, snapshot.panes) }),
+        });
+      }
+    }
   }
   if (selectedRuntime && selectedPane && selectedRuntime.capabilities?.commands.some((method) =>
     ["pane.zoom", "pane.resize", "pane.swap", "pane.process_info", "agent.explain", "agent.prompt"].includes(method))) {
@@ -4006,6 +4068,10 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       paletteEntries.push({
         id: `tab:${runtime.id}:${tab.tab_id}`, kind: "Tab",
         label: displayTabLabel(tab, hostSnapshot.panes),
+        shortcut: (() => {
+          const index = numberedTabEntries.findIndex((entry) => entry.bridgeId === runtime.id && entry.tab.tab_id === tab.tab_id);
+          return index >= 0 && index < 9 ? `⌘${index + 1}` : undefined;
+        })(),
         detail: `${runtime.label} · ${workspace?.label ?? "Space"}`,
         onSelect: () => selectTab(runtime.id, tab.tab_id),
       });
@@ -4044,6 +4110,18 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       },
     }));
 
+  const activeMenuItemsWithShortcuts = activeMenuItems.map((item) => {
+    if (!menu || !selectedRuntime || selectedRuntime.id !== menu.bridgeId) return item;
+    if (item.key === "newtab" && menu.kind === "space" && activeSpace?.workspace_id === menu.id) {
+      return { ...item, shortcut: "⌘N" };
+    }
+    if (item.key === "close" && menu.kind === "pane" && selectedPane?.pane_id === menu.id &&
+      snapshot && sortPanesForTab(snapshot.panes, selectedPane.tab_id).length > 1) {
+      return { ...item, shortcut: "⌘W" };
+    }
+    return item;
+  });
+
   const renderTerminal = !isCompactLayout || showDetail;
   const appStyle = {
     "--sidebar-w": `${sidebarWidth}px`,
@@ -4077,6 +4155,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       data-touch={isTouchInput ? "true" : "false"}
       data-detail={isCompactLayout && showDetail ? "true" : "false"}
     >
+      <FocusTooltip />
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {spaceReorderAnnouncement}
       </span>
@@ -4673,7 +4752,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           x={menu.x}
           y={menu.y}
           title={menu.label}
-          items={activeMenuItems}
+          items={activeMenuItemsWithShortcuts}
           onPick={onMenuPick}
           onClose={() => setMenu(null)}
         />

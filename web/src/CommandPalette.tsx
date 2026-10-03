@@ -7,6 +7,7 @@ export type PaletteEntry = {
   kind: string;
   label: string;
   detail?: string;
+  shortcut?: string;
   search?: string;
   onSelect: () => void;
 };
@@ -15,7 +16,7 @@ export function filterPaletteEntries(entries: readonly PaletteEntry[], query: st
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return entries;
   return entries.filter((entry) => {
-    const text = `${entry.kind} ${entry.label} ${entry.detail ?? ""} ${entry.search ?? ""}`.toLocaleLowerCase();
+    const text = `${entry.kind} ${entry.label} ${entry.detail ?? ""} ${entry.shortcut ?? ""} ${entry.search ?? ""}`.toLocaleLowerCase();
     return words.every((word) => text.includes(word));
   });
 }
@@ -29,7 +30,7 @@ export function CommandPalette({ entries, onClose }: { entries: readonly Palette
   const keyboardSelectionRef = useRef(false);
   const titleId = useId();
   const resultsId = useId();
-  const { skipFocusReturn } = useFocusReturn();
+  const { targetRef, skipFocusReturn } = useFocusReturn();
   const matches = useMemo(() => filterPaletteEntries(entries, query).slice(0, 60), [entries, query]);
   const active = Math.min(selected, matches.length - 1);
 
@@ -47,6 +48,14 @@ export function CommandPalette({ entries, onClose }: { entries: readonly Palette
   }, [active, matches, keyboardNavTick]);
 
   const choose = (entry: PaletteEntry) => {
+    if (entry.kind === "Action") {
+      onClose();
+      window.requestAnimationFrame(() => {
+        targetRef.current?.focus({ preventScroll: true });
+        entry.onSelect();
+      });
+      return;
+    }
     skipFocusReturn();
     onClose();
     entry.onSelect();
@@ -89,6 +98,7 @@ export function CommandPalette({ entries, onClose }: { entries: readonly Palette
               onPointerMove={() => { keyboardSelectionRef.current = false; setSelected(index); }} onClick={() => choose(entry)}>
               <span className="palette-result-kind">{entry.kind}</span>
               <span className="palette-result-label">{entry.label}</span>
+              {entry.shortcut ? <kbd className="palette-result-shortcut" aria-label={`Shortcut ${entry.shortcut}`}>{entry.shortcut}</kbd> : null}
               {entry.detail ? <span className="palette-result-detail">{entry.detail}</span> : null}
             </button>
           ))}

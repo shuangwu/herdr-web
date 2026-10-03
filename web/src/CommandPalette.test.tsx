@@ -63,3 +63,18 @@ it("scrolls the keyboard-selected result into view without stationary mouse hove
   expect(rows[1].dataset.active).toBe("true");
   await act(async () => root.unmount());
 });
+
+it("shows available shortcuts and finds actions by shortcut", async () => {
+  const entries: PaletteEntry[] = [
+    { id: "new-tab", kind: "Action", label: "Create tab", shortcut: "⌘N", onSelect: vi.fn() },
+    { id: "machine", kind: "Action", label: "Manage machines", onSelect: vi.fn() },
+  ];
+  expect(filterPaletteEntries(entries, "⌘N").map((entry) => entry.id)).toEqual(["new-tab"]);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<CommandPalette entries={entries} onClose={vi.fn()} />));
+  expect(host.querySelector<HTMLElement>(".palette-result-shortcut")?.textContent).toBe("⌘N");
+  expect(host.querySelectorAll(".palette-result-shortcut")).toHaveLength(1);
+  await act(async () => root.unmount());
+});

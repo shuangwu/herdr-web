@@ -47,6 +47,21 @@ afterEach(async () => {
 });
 
 describe("BackendSettingsDialog terminal accessibility", () => {
+  it("moves through settings tabs with arrows, Home, and End", async () => {
+    const { container } = await render(<BackendSettingsDialog {...settingsProps()} />);
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    tabs[0].focus();
+    await act(async () => tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })));
+    expect(document.activeElement).toBe(tabs[1]);
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(tabs[0].tabIndex).toBe(-1);
+    expect(container.querySelector('[role="tabpanel"]')?.getAttribute("aria-labelledby")).toBe(tabs[1].id);
+    await act(async () => tabs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true })));
+    expect(document.activeElement).toBe(tabs.at(-1));
+    await act(async () => tabs.at(-1)?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true })));
+    expect(document.activeElement).toBe(tabs[0]);
+  });
+
   it("offers opt-in blocked notifications and sound in Features", async () => {
     const onNotifications = vi.fn();
     const onSound = vi.fn();
