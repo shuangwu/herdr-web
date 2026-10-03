@@ -60,6 +60,9 @@
 
 ### Fixed
 
+- Forward terminal mouse reports when an app enables mouse tracking, so controls such as Claude
+  Code's diff-panel close button respond to clicks in Herdr Web.
+
 - Close the new-tab or new-pane launcher when the creation request succeeds, without waiting for
   the follow-up snapshot; improve Settings tab-key navigation, palette focus return, and Worktrees
   removal-confirmation focus.

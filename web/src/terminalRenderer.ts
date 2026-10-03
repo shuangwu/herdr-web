@@ -51,6 +51,7 @@ import {
 } from "./terminalImeInput";
 import type { TerminalImeState } from "./terminalImeInput";
 import { installTerminalImeFocusRedirect } from "./terminalImeFocus";
+import { encodeTerminalMouse } from "./terminalMouse";
 
 const TERMINAL_TEXT_INPUT_TAP_GRACE_MS = 4000;
 const TOUCH_SELECTION_LONG_PRESS_MS = 600;
@@ -170,6 +171,8 @@ export class GhosttyRenderer implements TerminalRenderer {
   #scrollSensitivity = 1;
   #scrollCallback: ((lines: number) => void) | null = null;
   #touchCleanup: (() => void) | null = null;
+  #mouseCleanup: (() => void) | null = null;
+  #mouseInputCallback: ((data: string) => void) | null = null;
   #mobileInputCleanup: (() => void) | null = null;
   #imeFocusCleanup: (() => void) | null = null;
   #accessibleScreenCallback: ((text: string) => void) | null = null;
@@ -235,6 +238,7 @@ export class GhosttyRenderer implements TerminalRenderer {
     this.#terminal = terminal;
     this.#fitAddon = fitAddon;
     this.#installAccessibleScreenPublisher();
+    this.#installMouseReporting();
     this.#installScrollHandlers();
     this.#installMobileInputBridge();
     this.#installImeFocusRedirect();
@@ -260,8 +264,12 @@ export class GhosttyRenderer implements TerminalRenderer {
   }
 
   onInput(callback: (data: string) => void) {
+    this.#mouseInputCallback = callback;
     const disposable = this.#requireTerminal().onData(callback);
-    return () => disposable.dispose();
+    return () => {
+      disposable.dispose();
+      if (this.#mouseInputCallback === callback) this.#mouseInputCallback = null;
+    };
   }
 
   onScroll(callback: (lines: number) => void) {
@@ -379,6 +387,9 @@ export class GhosttyRenderer implements TerminalRenderer {
     }
     this.#touchCleanup?.();
     this.#touchCleanup = null;
+    this.#mouseCleanup?.();
+    this.#mouseCleanup = null;
+    this.#mouseInputCallback = null;
     this.#mobileInputCleanup?.();
     this.#mobileInputCleanup = null;
     this.#imeFocusCleanup?.();
@@ -469,6 +480,80 @@ export class GhosttyRenderer implements TerminalRenderer {
       }
       throw error;
     }
+  }
+
+  #installMouseReporting() {
+    this.#mouseCleanup?.();
+    const terminal = this.#requireTerminal();
+    const container = this.#container;
+    const canvas = terminal.renderer?.getCanvas();
+    if (!container || !canvas) return;
+    let pressedButton: number | null = null;
+    let lastMoveCell = "";
+    const onCanvas = (event: Event) => event.target === canvas;
+    const tracking = () => this.#isCurrentTerminal(terminal) && this.#hasMouseTracking(terminal);
+    const send = (action: "press" | "release" | "move" | "wheel-up" | "wheel-down",
+      button: number, event: MouseEvent | WheelEvent) => {
+      const { col, row } = touchCellPosition(terminal, event.clientX, event.clientY);
+      const data = encodeTerminalMouse(action, button, col + 1, row + 1, {
+        shift: event.shiftKey,
+        alt: event.altKey || event.metaKey,
+        ctrl: event.ctrlKey,
+      }, terminal.getMode(1006));
+      if (data) this.#mouseInputCallback?.(data);
+    };
+    const consume = (event: Event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const onMouseUp = (event: MouseEvent) => {
+      document.removeEventListener("mouseup", onMouseUp, true);
+      const button = pressedButton;
+      pressedButton = null;
+      lastMoveCell = "";
+      if (button === null || !tracking()) return;
+      if (!terminal.getMode(9)) send("release", button, event);
+      if (onCanvas(event)) consume(event);
+    };
+    const onMouseDown = (event: MouseEvent) => {
+      if (!onCanvas(event) || !tracking() || ![0, 1, 2].includes(event.button)) return;
+      pressedButton = event.button;
+      lastMoveCell = "";
+      terminal.focus();
+      send("press", event.button, event);
+      document.addEventListener("mouseup", onMouseUp, true);
+      consume(event);
+    };
+    const onMouseMove = (event: MouseEvent) => {
+      if (!onCanvas(event) || !tracking() ||
+          !(terminal.getMode(1003) || (pressedButton !== null && terminal.getMode(1002)))) return;
+      const { col, row } = touchCellPosition(terminal, event.clientX, event.clientY);
+      const cell = `${col}:${row}:${pressedButton ?? 3}`;
+      if (cell !== lastMoveCell) {
+        lastMoveCell = cell;
+        send("move", pressedButton ?? 3, event);
+      }
+      consume(event);
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!onCanvas(event) || !tracking() || event.deltaY === 0) return;
+      send(event.deltaY < 0 ? "wheel-up" : "wheel-down", 0, event);
+      consume(event);
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      if (onCanvas(event) && tracking()) consume(event);
+    };
+    container.addEventListener("mousedown", onMouseDown, true);
+    container.addEventListener("mousemove", onMouseMove, true);
+    container.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    container.addEventListener("contextmenu", onContextMenu, true);
+    this.#mouseCleanup = () => {
+      document.removeEventListener("mouseup", onMouseUp, true);
+      container.removeEventListener("mousedown", onMouseDown, true);
+      container.removeEventListener("mousemove", onMouseMove, true);
+      container.removeEventListener("wheel", onWheel, true);
+      container.removeEventListener("contextmenu", onContextMenu, true);
+    };
   }
 
   #installScrollHandlers() {
