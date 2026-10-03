@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { mergeRemoteConfig } from "./remote-config.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HOME_DIR = os.homedir();
@@ -92,18 +93,7 @@ async function setup() {
   for (const host of selected) if (!machines.some((m) => m.host === host)) throw new Error("Unknown enabled SSH machine: " + host);
   const targets = machines.filter((m) => selected.length === 0 || selected.includes(m.host));
   if (!targets.length) throw new Error("No enabled saved SSH machines");
-  const cfg = { port: 5173, bridgePort: 8787, remotes: [...previous.remotes] };
-  const usedPorts = new Set(cfg.remotes.map((r) => r.localPort));
-  for (const target of targets) {
-    const existing = cfg.remotes.find((r) => r.id === target.id);
-    if (existing) Object.assign(existing, target);
-    else {
-      let localPort = 8791;
-      while (usedPorts.has(localPort)) localPort++;
-      usedPorts.add(localPort);
-      cfg.remotes.push({ ...target, localPort });
-    }
-  }
+  const cfg = mergeRemoteConfig(previous, targets);
   const cache = path.join(ROOT, ".scratch/remote-setup"); mkdirSync(cache, { recursive: true });
   const filename = `herdr-web-${VERSION}-linux-x86_64.tar.gz`;
   for (const asset of [filename, filename + ".sha256"]) {

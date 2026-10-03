@@ -15,6 +15,12 @@ import { addNativeResumeHandler } from "./native";
 
 export const SAME_ORIGIN_BRIDGE_ID = "same-origin";
 
+export function sameOriginBridgeLabel(hostname = globalThis.location?.hostname ?? "") {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
+    ? "Localhost"
+    : "Same origin";
+}
+
 export type BridgeId = string;
 
 export type BridgeBackendProfile = {
@@ -544,7 +550,7 @@ function buildAvailableRuntimes({
       createBridgeRuntime({
         id: SAME_ORIGIN_BRIDGE_ID,
         mode: "same-origin",
-        label: "Same origin",
+        label: sameOriginBridgeLabel(),
         backend: null,
         baseUrl: null,
         probeState: probeStates[SAME_ORIGIN_BRIDGE_ID],

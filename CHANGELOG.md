@@ -25,6 +25,8 @@
 
 ### Changed
 
+- Label the same-origin bridge "Localhost" when the web app is served from a loopback address.
+
 - Automatically increment Android `versionCode` and stamp `versionName` in the tagged release
   commit, keeping repeated builds of that release on the same Android version.
   [PR #91](https://github.com/kcosr/herdr-web/pull/91).
@@ -33,6 +35,9 @@
   [Will Hampson (@Whamp)](https://github.com/Whamp).
 
 ### Fixed
+
+- Keep a remote bridge's gateway URL and tunnel port when Herdr recreates a saved machine with a
+  new ID, and collapse duplicate entries for the same SSH host and session during setup.
 
 - Send protocol-level pings on idle browser WebSockets and close connections that do not return peer
   traffic within 15 seconds, removing dead transports without claiming to detect frozen JavaScript.

@@ -20,6 +20,7 @@ import {
   normalizeBackendColor,
   SAME_ORIGIN_BRIDGE_ID,
   SAME_ORIGIN_BRIDGE_COLOR,
+  sameOriginBridgeLabel,
   suggestBackendColor,
   useBridge,
 } from "./bridge";
@@ -214,6 +215,7 @@ export function BackendSettingsDialog({
     [bridge.store.backends, form.id],
   );
   const sameOriginEnabled = bridge.store.enabledBridgeIds.includes(SAME_ORIGIN_BRIDGE_ID);
+  const sameOriginLabel = sameOriginBridgeLabel();
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -407,9 +409,9 @@ export function BackendSettingsDialog({
                         active={selectionMode === "same-origin"}
                         color={SAME_ORIGIN_BRIDGE_COLOR}
                         enabled={sameOriginEnabled}
-                        title="Same origin"
+                        title={sameOriginLabel}
                         subtitle={sameOriginUrl}
-                        toggleLabel={`${sameOriginEnabled ? "Disable" : "Enable"} Same origin bridge`}
+                        toggleLabel={`${sameOriginEnabled ? "Disable" : "Enable"} ${sameOriginLabel} bridge`}
                         onSelect={selectSameOrigin}
                         onToggle={() => bridge.setBridgeEnabled(SAME_ORIGIN_BRIDGE_ID, !sameOriginEnabled)}
                       />
@@ -446,7 +448,7 @@ export function BackendSettingsDialog({
                   <div className="backend-form">
                     {selectionMode === "same-origin" ? (
                       <div className="backend-static">
-                        <strong>Same origin</strong>
+                        <strong>{sameOriginLabel}</strong>
                         <span>
                           {sameOriginEnabled ? "Enabled" : "Disabled"}; uses the server that
                           delivered this web app.

@@ -17,6 +17,8 @@ Existing healthy bridges are reused. An existing unhealthy bridge is reported in
 Use `setup --force [SSH_ALIAS ...]` to replace all `herdr-web-bridge` instances owned by your
 account on the selected machines. This interrupts their web clients; Herdr sessions remain
 running. A reused bridge that is not supervised is reported as `supervised: false`.
+If a saved Herdr machine is recreated with a new ID but the same SSH host and session, setup keeps
+its prior gateway URL and tunnel port so existing browser profiles continue to work.
 
 On macOS, launch agents supervise a local bridge, a small HTTP/WebSocket gateway, and one SSH
 tunnel per remote. SSH keepalives detect a broken transport in approximately 45 seconds;
