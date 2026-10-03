@@ -1956,8 +1956,8 @@ button {
 
 .terminal-upload-fab {
   position: absolute;
-  right: 12px;
-  top: 12px;
+  right: clamp(12px, var(--terminal-upload-right, 12px), calc(100% - 46px));
+  bottom: clamp(12px, var(--terminal-upload-bottom, 12px), calc(100% - 46px));
   z-index: 3;
   display: inline-grid;
   width: 34px;
@@ -1970,6 +1970,7 @@ button {
   color: var(--text);
   opacity: 0.78;
   touch-action: manipulation;
+  cursor: grab;
 }
 
 .terminal-upload-fab:hover,
@@ -1987,7 +1988,7 @@ button {
 .terminal-upload-status {
   position: absolute;
   right: 12px;
-  bottom: 12px;
+  bottom: 54px;
   z-index: 4;
   max-width: min(420px, calc(100vw - 24px));
   overflow: hidden;
@@ -3770,16 +3771,30 @@ button {
   bottom: calc(var(--terminal-command-controls-height) + 14px);
 }
 
-.terminal-stage:has(.terminal-command-controls) .terminal-upload-status,
+.terminal-stage:has(.terminal-command-controls) .terminal-upload-fab {
+  bottom: clamp(
+    calc(var(--terminal-command-controls-height) + 12px),
+    var(--terminal-upload-bottom, calc(var(--terminal-command-controls-height) + 12px)),
+    calc(100% - 46px)
+  );
+}
+
 .terminal-stage:has(.terminal-command-controls) .terminal-selection-sheet {
   bottom: calc(var(--terminal-command-controls-height) + 8px);
+}
+
+.terminal-stage:has(.terminal-command-controls) .terminal-upload-status {
+  bottom: calc(var(--terminal-command-controls-height) + 54px);
 }
 
 .app[data-touch="true"] .terminal-stage:has(.terminal-command-controls) .terminal-overlay {
   bottom: calc(var(--terminal-command-controls-height) + 38px * var(--mobile-controls-scale));
 }
 
-.app[data-touch="true"] .terminal-stage:has(.terminal-command-controls) .terminal-upload-status,
 .app[data-touch="true"] .terminal-stage:has(.terminal-command-controls) .terminal-selection-sheet {
   bottom: calc(var(--terminal-command-controls-height) + 8px * var(--mobile-controls-scale));
+}
+
+.app[data-touch="true"] .terminal-stage:has(.terminal-command-controls) .terminal-upload-status {
+  bottom: calc(var(--terminal-command-controls-height) + 54px * var(--mobile-controls-scale));
 }

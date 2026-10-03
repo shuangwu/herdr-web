@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
+import type { ChangeEvent, ClipboardEvent, CSSProperties, DragEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { autosizeMobileCommandTextarea } from "./mobileCommandTextarea";
 import {
   encodeMobileTerminalChord,
@@ -144,6 +144,15 @@ type UploadConflictState = {
   path: string;
   resolve: (replace: boolean) => void;
 };
+type UploadButtonPosition = { right: number; bottom: number };
+type UploadButtonDrag = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startRight: number;
+  startBottom: number;
+  moved: boolean;
+};
 type MobileSelectionAction = {
   text: string;
   url: string;
@@ -165,7 +174,23 @@ type TerminalRendererReady = {
   measure: (mode?: "fit" | "refresh") => TerminalSize | null;
 };
 const MAX_UPLOAD_FILES = 8;
+const UPLOAD_BUTTON_INSET = 12;
+const UPLOAD_BUTTON_SIZE = 34;
 const DEBUG_TERMINAL_RECONNECT = false;
+
+function readUploadButtonPosition(key: string): UploadButtonPosition | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) ?? "null") as Partial<UploadButtonPosition> | null;
+    if (value && Number.isFinite(value.right) && Number.isFinite(value.bottom)) {
+      return { right: Math.max(UPLOAD_BUTTON_INSET, value.right!), bottom: Math.max(UPLOAD_BUTTON_INSET, value.bottom!) };
+    }
+  } catch { /* Storage can be unavailable in private browsing. */ }
+  return null;
+}
+
+function clampUploadButtonOffset(value: number, extent: number, minimum = UPLOAD_BUTTON_INSET) {
+  return Math.max(minimum, Math.min(value, extent - UPLOAD_BUTTON_SIZE - UPLOAD_BUTTON_INSET));
+}
 
 function createGhosttyTerminalRenderer(fontSizePx: number, cursorBlink: boolean) {
   return new GhosttyRenderer(fontSizePx, cursorBlink);
@@ -225,6 +250,9 @@ export function TerminalView({
   const uploadStatusTimerRef = useRef<number | null>(null);
   const uploadInFlightRef = useRef(false);
   const uploadConflictRef = useRef<UploadConflictState | null>(null);
+  const uploadButtonDragRef = useRef<UploadButtonDrag | null>(null);
+  const uploadButtonPositionRef = useRef<UploadButtonPosition | null>(null);
+  const suppressUploadClickRef = useRef(false);
   const connectionKeyRef = useRef(connectionKey);
   const terminalIdRef = useRef(pane?.terminal_id ?? null);
   const overlayTerminalIdRef = useRef(pane?.terminal_id ?? null);
@@ -239,6 +267,14 @@ export function TerminalView({
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadConflict, setUploadConflict] = useState<UploadConflictState | null>(null);
+  const uploadPositionKey = `herdr-web:upload-button:${bridgeId}:${pane?.pane_id ?? "none"}`;
+  const [uploadButtonPosition, setUploadButtonPosition] = useState<UploadButtonPosition | null>(() =>
+    readUploadButtonPosition(uploadPositionKey),
+  );
+  uploadButtonPositionRef.current = uploadButtonPosition;
+  useEffect(() => {
+    setUploadButtonPosition(readUploadButtonPosition(uploadPositionKey));
+  }, [uploadPositionKey]);
   const [mobileSelectionAction, setMobileSelectionAction] =
     useState<MobileSelectionAction | null>(null);
   // Read at attach time without re-running the effect (which would re-attach the socket).
@@ -1274,6 +1310,58 @@ export function TerminalView({
     }
   };
 
+  const startUploadButtonDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || uploadDisabled) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const stageRect = stage.getBoundingClientRect();
+    const buttonRect = event.currentTarget.getBoundingClientRect();
+    uploadButtonDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRight: stageRect.right - buttonRect.right,
+      startBottom: stageRect.bottom - buttonRect.bottom,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const moveUploadButton = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = uploadButtonDragRef.current;
+    const stage = stageRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !stage) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true;
+    suppressUploadClickRef.current = true;
+    const rect = stage.getBoundingClientRect();
+    const controls = stage.querySelector(".terminal-command-controls");
+    const minimumBottom = (controls?.getBoundingClientRect().height ?? 0) + UPLOAD_BUTTON_INSET;
+    const next = {
+      right: clampUploadButtonOffset(drag.startRight - dx, rect.width),
+      bottom: clampUploadButtonOffset(drag.startBottom - dy, rect.height, minimumBottom),
+    };
+    uploadButtonPositionRef.current = next;
+    setUploadButtonPosition(next);
+  };
+
+  const finishUploadButtonDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = uploadButtonDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    uploadButtonDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (drag.moved && uploadButtonPositionRef.current) {
+      try {
+        localStorage.setItem(uploadPositionKey, JSON.stringify(uploadButtonPositionRef.current));
+      } catch { /* Storage can be unavailable in private browsing. */ }
+      window.setTimeout(() => { suppressUploadClickRef.current = false; }, 0);
+    }
+  };
+
   const confirmUploadReplace = (error: UploadConflictError) =>
     new Promise<boolean>((resolve) => {
       const next = { name: error.name, path: error.path, resolve };
@@ -1455,9 +1543,23 @@ export function TerminalView({
           className="terminal-upload-fab"
           type="button"
           aria-label="Upload file"
-          title="Upload file"
+          title="Upload file (drag to move)"
+          style={uploadButtonPosition ? {
+            "--terminal-upload-right": `${uploadButtonPosition.right}px`,
+            "--terminal-upload-bottom": `${uploadButtonPosition.bottom}px`,
+          } as CSSProperties : undefined}
           disabled={uploadDisabled}
-          onClick={openFilePicker}
+          onPointerDown={startUploadButtonDrag}
+          onPointerMove={moveUploadButton}
+          onPointerUp={finishUploadButtonDrag}
+          onPointerCancel={finishUploadButtonDrag}
+          onClick={() => {
+            if (suppressUploadClickRef.current) {
+              suppressUploadClickRef.current = false;
+              return;
+            }
+            openFilePicker();
+          }}
         >
           <Paperclip size={16} />
         </button>

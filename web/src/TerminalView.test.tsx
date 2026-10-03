@@ -267,15 +267,63 @@ describe("TerminalView mobile refitting", () => {
   });
 });
 
+describe("TerminalView upload button", () => {
+  it("keeps a dragged position for the pane without opening the file picker", async () => {
+    const key = "herdr-web:upload-button:bridge-1:pane-1";
+    localStorage.removeItem(key);
+    const drafts = createCommandDraftStore();
+    const root = await renderTerminalView(testPane("terminal-1"), drafts, false);
+    const button = document.querySelector<HTMLButtonElement>(".terminal-upload-fab");
+    const stage = document.querySelector<HTMLElement>(".terminal-stage");
+    const fileInput = document.querySelector<HTMLInputElement>(".terminal-file-input");
+    expect(button && stage && fileInput).toBeTruthy();
+    if (!button || !stage || !fileInput) return;
+    vi.spyOn(stage, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300,
+    } as DOMRect);
+    vi.spyOn(button, "getBoundingClientRect").mockReturnValue({
+      left: 354, top: 254, right: 388, bottom: 288, width: 34, height: 34,
+    } as DOMRect);
+    const picker = vi.spyOn(fileInput, "click");
+    const pointer = (type: string, clientX: number, clientY: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { button: 0, pointerId: 1, clientX, clientY });
+      button.dispatchEvent(event);
+    };
+    await act(async () => {
+      pointer("pointerdown", 370, 270);
+      pointer("pointermove", 270, 170);
+      pointer("pointerup", 270, 170);
+      button.click();
+    });
+    expect(picker).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem(key) ?? "null")).toEqual({ right: 112, bottom: 112 });
+    expect(button.style.getPropertyValue("--terminal-upload-right")).toBe("112px");
+    await act(async () => { button.click(); });
+    expect(picker).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+    roots.splice(roots.indexOf(root), 1);
+    await renderTerminalView(testPane("terminal-1"), drafts, false);
+    expect(document.querySelector<HTMLButtonElement>(".terminal-upload-fab")?.style.getPropertyValue(
+      "--terminal-upload-right",
+    )).toBe("112px");
+    localStorage.removeItem(key);
+  });
+});
+
 async function renderTerminalView(
   pane: PaneInfo,
   drafts: ReturnType<typeof createCommandDraftStore>,
+  mobileControls = true,
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   roots.push(root);
-  await renderPane(root, pane, drafts);
+  await renderPane(root, pane, drafts, mobileControls);
   return root;
 }
 
@@ -283,6 +331,7 @@ async function renderPane(
   root: Root,
   pane: PaneInfo,
   drafts: ReturnType<typeof createCommandDraftStore>,
+  mobileControls = true,
 ) {
   await act(async () => {
     root.render(
@@ -295,7 +344,7 @@ async function renderPane(
           httpUrl={(path) => path}
           wsUrl={(path) => path}
           autoFocus={false}
-          mobileControls
+          mobileControls={mobileControls}
           terminalOutputCoalesceMs={0}
           selected
           createTerminalRenderer={createFakeTerminalRenderer}

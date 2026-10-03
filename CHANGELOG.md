@@ -46,6 +46,9 @@
 
 ### Changed
 
+- Place the terminal upload button in the lower-right corner and allow dragging it to a saved
+  position within each pane.
+
 - Label the same-origin bridge "Localhost" when the web app is served from a loopback address.
 
 - Automatically increment Android `versionCode` and stamp `versionName` in the tagged release
