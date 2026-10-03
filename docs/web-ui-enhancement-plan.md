@@ -37,13 +37,17 @@ service, and Herdr's saved-machine catalog are separate. Add a **Machines** area
 them as one lifecycle, while preserving stable browser URLs if Herdr recreates a machine ID.
 
 1. **Read-only status and diagnosis:** show browser profile, gateway, tunnel, SSH reachability,
-   authentication, remote Herdr socket/version/protocol, bridge service, and snapshot health.
+   authentication, SSH-agent forwarding, remote Herdr socket/version/protocol, bridge service,
+   and snapshot health. For agent forwarding, distinguish a fresh SSH connection with a usable
+   agent from a running server or pane that inherited a stale `SSH_AUTH_SOCK`.
    Show the exact failing layer and recent relevant logs. Refresh automatically after network
    changes; never display stale snapshots as live.
 2. **Guided repair:** offer the smallest action that matches the diagnosis: retry a probe,
    reconnect a tunnel, start/restart a stopped bridge, repair a missing service, or merge the
    browser profile. Explain when VPN, SSH credentials, or host-key approval must be completed in
-   a terminal. Keep `--force` replacement separate because it interrupts web clients.
+   a terminal. For stale pane agent sockets, recommend a server version with reconnect handling
+   and distinguish live handoff from restarting pane processes. Keep `--force` replacement
+   separate because it interrupts web clients.
 3. **Add and manage:** a wizard for SSH target, label, and Herdr session; validate the target,
    add the Herdr machine, provision the bridge, create the tunnel, enable the browser profile,
    and verify the end-to-end snapshot. Support rename, enable/disable, reconnect, and remove.
