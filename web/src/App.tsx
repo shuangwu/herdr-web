@@ -6868,7 +6868,6 @@ function Switcher({
   const panes = scopedWorkspaces.flatMap((entry) =>
     entry.snapshot.panes.filter((pane) => pane.workspace_id === entry.workspace.workspace_id),
   );
-  const roll = aggregateStatus(panes);
   const headerSummary = summary(panes);
   const bridgeBlocked =
     bridgeViews.length === 0 ||
@@ -7798,7 +7797,6 @@ function Switcher({
         <div className="brand">
           <span className="brand-mark" title={`Herdr Web · ${headerSummary || bridgeLabel}`}>
             <img className="brand-logo" src="/herdr-logo.svg" alt="Herdr Web" />
-            <span className="brand-dot dot" data-status={roll} aria-hidden="true" />
           </span>
         </div>
         <button className="icon-btn" type="button" aria-label="Command palette" title="Command palette (⌘K)" onClick={(event) => {

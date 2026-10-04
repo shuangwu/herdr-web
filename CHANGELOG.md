@@ -60,6 +60,8 @@
 
 ### Fixed
 
+- Remove the stray status square beside the Herdr logo in the sidebar header.
+
 - Forward terminal mouse reports when an app enables mouse tracking, so controls such as Claude
   Code's diff-panel close button respond to clicks in Herdr Web.
 
