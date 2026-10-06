@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CommandDraftContext, createCommandDraftStore } from "./commandDrafts";
 import type { TerminalRenderer, TerminalSize } from "./terminalRenderer";
-import { TerminalView } from "./TerminalView";
+import { modeAwareArrowKey, TerminalView } from "./TerminalView";
 import type { PaneInfo } from "./types";
 
 const MOUNTED_TERMINAL_SIZE: TerminalSize = { cols: 80, rows: 24 };
@@ -158,6 +158,49 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("mode-aware terminal arrows", () => {
+  it("routes only unmodified arrows to Herdr's pane key encoder", () => {
+    const event = (key: string, overrides: Partial<KeyboardEvent> = {}) => ({
+      key, altKey: false, ctrlKey: false, metaKey: false, shiftKey: false,
+      isComposing: false, ...overrides,
+    });
+    expect(modeAwareArrowKey(event("ArrowUp"))).toBe("up");
+    expect(modeAwareArrowKey(event("ArrowDown"))).toBe("down");
+    expect(modeAwareArrowKey(event("ArrowLeft"))).toBe("left");
+    expect(modeAwareArrowKey(event("ArrowRight"))).toBe("right");
+    expect(modeAwareArrowKey(event("ArrowUp", { shiftKey: true }))).toBeNull();
+    expect(modeAwareArrowKey(event("ArrowUp", { isComposing: true }))).toBeNull();
+    expect(modeAwareArrowKey(event("p"))).toBeNull();
+  });
+
+  it("sends a plain arrow on the terminal socket without letting the renderer encode it", async () => {
+    const drafts = createCommandDraftStore();
+    await renderTerminalView(testPane("terminal-1"), drafts, false);
+    await act(async () => {
+      terminalRenderers[0]?.completeMount();
+      await Promise.resolve();
+    });
+    const socket = FakeWebSocket.instances.at(-1);
+    const host = document.querySelector<HTMLDivElement>(".terminal-host");
+    if (!socket || !host) throw new Error("Expected terminal socket and host");
+    await act(async () => { socket.open(); });
+    const beforeAck = new KeyboardEvent("keydown", { key: "ArrowUp", code: "ArrowUp", bubbles: true, cancelable: true });
+    host.dispatchEvent(beforeAck);
+    expect(beforeAck.defaultPrevented).toBe(false);
+    expect(socket.sent).not.toContain(JSON.stringify({ type: "key", key: "up" }));
+    socket.dispatchEvent(new MessageEvent("message", {
+      data: '{"type":"terminal_key_mode","semantic_arrows":true}',
+    }));
+    const rendererKeydown = vi.fn();
+    host.addEventListener("keydown", rendererKeydown);
+    const arrow = new KeyboardEvent("keydown", { key: "ArrowUp", code: "ArrowUp", bubbles: true, cancelable: true });
+    host.dispatchEvent(arrow);
+    expect(arrow.defaultPrevented).toBe(true);
+    expect(rendererKeydown).not.toHaveBeenCalled();
+    expect(socket.sent.at(-1)).toBe(JSON.stringify({ type: "key", key: "up" }));
+  });
 });
 
 describe("TerminalView mobile refitting", () => {

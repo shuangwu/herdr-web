@@ -60,6 +60,9 @@
 
 ### Fixed
 
+- Route unmodified terminal arrow keys through Herdr's pane-aware key encoder so already-running
+  curses apps receive the right cursor sequences after Herdr Web attaches.
+
 - Remove the stray status square beside the Herdr logo in the sidebar header.
 
 - Forward terminal mouse reports when an app enables mouse tracking, so controls such as Claude

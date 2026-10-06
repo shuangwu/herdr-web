@@ -36,9 +36,10 @@ use herdr_compat::api::client::{ApiClient, ApiClientError};
 use herdr_compat::api::schema::{
     AgentInfo, AgentStartParams, AgentStatus, AgentTarget, EmptyParams, EventsSubscribeParams,
     LayoutApplyParams, LayoutExportParams, Method, PaneInfo, PaneLayoutSnapshot, PaneListParams,
-    PaneMoveDestination, PaneSplitParams, PaneTarget, Request, ResponseResult, SessionSnapshot,
-    SplitDirection, Subscription, SubscriptionEventData, SubscriptionEventEnvelope,
-    SubscriptionEventKind, TabCreateParams, TabInfo, TabListParams, TabTarget, WorkspaceInfo,
+    PaneMoveDestination, PaneSendKeysParams, PaneSplitParams, PaneTarget, Request, ResponseResult,
+    SessionSnapshot, SplitDirection, Subscription, SubscriptionEventData,
+    SubscriptionEventEnvelope, SubscriptionEventKind, TabCreateParams, TabInfo, TabListParams,
+    TabTarget, WorkspaceInfo,
 };
 use herdr_compat::protocol::{
     self, AttachScrollDirection, AttachScrollSource, ClientMessage, RenderEncoding, ServerMessage,
@@ -83,6 +84,8 @@ const TERMINAL_OUTPUT_FRAME_GZIP: u8 = 1;
 const TERMINAL_OUTPUT_GZIP_MIN_BYTES: usize = 256;
 const TERMINAL_OUTPUT_GZIP_ACKNOWLEDGEMENT: &str =
     r#"{"type":"terminal_output_encoding","encoding":"gzip"}"#;
+const TERMINAL_SEMANTIC_ARROW_ACKNOWLEDGEMENT: &str =
+    r#"{"type":"terminal_key_mode","semantic_arrows":true}"#;
 const DAEMON_STATUS_TIMEOUT: Duration = Duration::from_secs(5);
 const ACTIVITY_WATCHER_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const ACTIVITY_WATCHER_MAX_BACKOFF: Duration = Duration::from_secs(30);
@@ -218,6 +221,9 @@ enum TerminalClientFrame {
     Input {
         data: String,
     },
+    Key {
+        key: TerminalArrowKey,
+    },
     Resize {
         cols: u16,
         rows: u16,
@@ -231,6 +237,26 @@ enum TerminalClientFrame {
         #[serde(default = "default_scroll_lines")]
         lines: u16,
     },
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum TerminalArrowKey {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+impl TerminalArrowKey {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -3812,6 +3838,17 @@ async fn handle_terminal_socket(socket: WebSocket, state: BridgeState, query: Te
 
     let write_tx = session.write_tx.clone();
     let mut terminal_rx = session.output_tx.subscribe();
+    if send_websocket_message(
+        &mut ws_sender,
+        Message::Text(TERMINAL_SEMANTIC_ARROW_ACKNOWLEDGEMENT.into()),
+        "terminal",
+    )
+    .await
+    .is_err()
+    {
+        release_terminal_session(&state.terminal_sessions, &terminal_id, &session);
+        return;
+    }
     if output_encoding == TerminalOutputWireEncoding::Gzip {
         let ack = Message::Text(TERMINAL_OUTPUT_GZIP_ACKNOWLEDGEMENT.into());
         if send_websocket_message(&mut ws_sender, ack, "terminal")
@@ -3825,6 +3862,7 @@ async fn handle_terminal_socket(socket: WebSocket, state: BridgeState, query: Te
 
     let mut output_coalescer = TerminalOutputCoalescer::new(coalesce_window);
     let mut heartbeat = WebSocketHeartbeat::new(Instant::now());
+    let mut key_pane_id: Option<String> = None;
     let _ = write_tx.send(ClientMessage::Resize {
         cols,
         rows,
@@ -3861,7 +3899,7 @@ async fn handle_terminal_socket(socket: WebSocket, state: BridgeState, query: Te
                 }
                 Some(message) = ws_receiver.next() => {
                     record_websocket_peer_activity(&mut heartbeat, &message);
-                    if !handle_terminal_client_message(&write_tx, message) {
+                    if !handle_terminal_client_message(&write_tx, &state.api, &terminal_id, &mut key_pane_id, message).await {
                         break;
                     }
                 }
@@ -3906,7 +3944,7 @@ async fn handle_terminal_socket(socket: WebSocket, state: BridgeState, query: Te
                 }
                 Some(message) = ws_receiver.next() => {
                     record_websocket_peer_activity(&mut heartbeat, &message);
-                    if !handle_terminal_client_message(&write_tx, message) {
+                    if !handle_terminal_client_message(&write_tx, &state.api, &terminal_id, &mut key_pane_id, message).await {
                         break;
                     }
                 }
@@ -4001,16 +4039,87 @@ async fn handle_terminal_output_message(
     }
 }
 
-fn handle_terminal_client_message(
+async fn handle_terminal_client_message(
     write_tx: &TerminalWriter,
+    api: &ApiClient,
+    terminal_id: &str,
+    key_pane_id: &mut Option<String>,
     message: Result<Message, axum::Error>,
 ) -> bool {
     match message {
-        Ok(Message::Text(text)) => handle_terminal_text_frame(write_tx, text.as_str()).is_ok(),
+        Ok(Message::Text(text)) => {
+            let Ok(frame) = parse_terminal_client_frame(text.as_str()) else {
+                return false;
+            };
+            match frame {
+                TerminalClientFrame::Key { key } => {
+                    let api = api.clone();
+                    let lookup_terminal_id = terminal_id.to_string();
+                    let cached_pane_id = key_pane_id.clone();
+                    match tokio::task::spawn_blocking(move || {
+                        send_terminal_arrow_key(
+                            &api,
+                            &lookup_terminal_id,
+                            cached_pane_id.as_deref(),
+                            key,
+                        )
+                    })
+                    .await
+                    {
+                        Ok(Ok(pane_id)) => {
+                            *key_pane_id = Some(pane_id);
+                            true
+                        }
+                        Ok(Err(err)) => {
+                            warn!(terminal_id, error = %err, "terminal arrow key failed");
+                            false
+                        }
+                        Err(err) => {
+                            warn!(terminal_id, error = %err, "terminal arrow key task failed");
+                            false
+                        }
+                    }
+                }
+                other => handle_terminal_client_frame(write_tx, other).is_ok(),
+            }
+        }
         Ok(Message::Binary(bytes)) => send_terminal_input_chunks(write_tx, &bytes).is_ok(),
         Ok(Message::Close(_)) => false,
         Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => true,
         Err(_) => false,
+    }
+}
+
+fn send_terminal_arrow_key(
+    api: &ApiClient,
+    terminal_id: &str,
+    cached_pane_id: Option<&str>,
+    key: TerminalArrowKey,
+) -> Result<String, BridgeError> {
+    let pane_id = match cached_pane_id {
+        Some(pane_id) => pane_id.to_string(),
+        None => current_panes(api)?
+            .into_iter()
+            .find(|pane| pane.terminal_id == terminal_id)
+            .map(|pane| pane.pane_id)
+            .ok_or_else(|| {
+                BridgeError::BadRequest(format!(
+                    "terminal {terminal_id} is not associated with an open pane"
+                ))
+            })?,
+    };
+    match api_request(
+        api,
+        "herdr-web:terminal-key",
+        Method::PaneSendKeys(PaneSendKeysParams {
+            pane_id: pane_id.clone(),
+            keys: vec![key.as_str().to_string()],
+        }),
+    )? {
+        ResponseResult::Ok {} => Ok(pane_id),
+        other => Err(BridgeError::Protocol(format!(
+            "unexpected terminal key response: {other:?}"
+        ))),
     }
 }
 
@@ -4682,13 +4791,16 @@ fn send_terminal_input_chunks(
     Ok(stats)
 }
 
-fn handle_terminal_text_frame(write_tx: &TerminalWriter, text: &str) -> Result<(), String> {
-    let frame = parse_terminal_client_frame(text)?;
+fn handle_terminal_client_frame(
+    write_tx: &TerminalWriter,
+    frame: TerminalClientFrame,
+) -> Result<(), String> {
     match frame {
         TerminalClientFrame::Input { data } => {
             send_terminal_input_chunks(write_tx, data.as_bytes())?;
             Ok(())
         }
+        TerminalClientFrame::Key { .. } => Err("terminal key requires pane routing".to_string()),
         TerminalClientFrame::Resize {
             cols,
             rows,
@@ -5753,6 +5865,73 @@ mod tests {
                 cell_height_px: 0
             }
         );
+    }
+
+    #[test]
+    fn parses_only_named_terminal_arrows() {
+        assert_eq!(
+            parse_terminal_client_frame(r#"{"type":"key","key":"up"}"#).unwrap(),
+            TerminalClientFrame::Key {
+                key: TerminalArrowKey::Up
+            }
+        );
+        assert_eq!(TerminalArrowKey::Up.as_str(), "up");
+        assert_eq!(TerminalArrowKey::Right.as_str(), "right");
+        assert!(parse_terminal_client_frame(r#"{"type":"key","key":"p"}"#).is_err());
+        assert!(parse_terminal_client_frame(r#"{"type":"key","key":"ctrl+c"}"#).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminal_arrow_targets_the_pane_owned_by_the_attached_terminal() {
+        use herdr_compat::api::schema::SuccessResponse;
+        use std::io::BufRead;
+
+        let socket_path = std::env::temp_dir().join(format!(
+            "herdr-web-terminal-key-test-{}.sock",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&socket_path);
+        let listener = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
+        let daemon = thread::spawn(move || {
+            for (index, expected) in ["pane.list", "pane.send_keys"].iter().enumerate() {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut line = String::new();
+                std::io::BufReader::new(stream.try_clone().unwrap())
+                    .read_line(&mut line)
+                    .unwrap();
+                let request: Request = serde_json::from_str(&line).unwrap();
+                let method = serde_json::to_value(&request.method).unwrap();
+                assert_eq!(method["method"], *expected);
+                if index == 1 {
+                    assert_eq!(method["params"]["pane_id"], "pane-1");
+                    assert_eq!(method["params"]["keys"], serde_json::json!(["up"]));
+                }
+                let result = if index == 0 {
+                    ResponseResult::PaneList {
+                        panes: vec![test_pane("pane-1")],
+                    }
+                } else {
+                    ResponseResult::Ok {}
+                };
+                let response = SuccessResponse {
+                    id: request.id,
+                    result,
+                };
+                writeln!(stream, "{}", serde_json::to_string(&response).unwrap()).unwrap();
+            }
+        });
+
+        let api = ApiClient::for_socket_path(socket_path.clone());
+        assert_eq!(
+            send_terminal_arrow_key(&api, "terminal-pane-1", None, TerminalArrowKey::Up).unwrap(),
+            "pane-1"
+        );
+        daemon.join().unwrap();
+        std::fs::remove_file(socket_path).unwrap();
     }
 
     #[test]

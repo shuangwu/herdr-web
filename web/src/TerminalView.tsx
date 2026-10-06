@@ -79,6 +79,9 @@ import {
 import type { UploadCandidate, UploadedFile } from "./terminalUploads";
 
 type TerminalRendererFactory = (fontSizePx: number, cursorBlink: boolean) => TerminalRenderer;
+type TerminalArrowKey = "up" | "down" | "left" | "right";
+const TERMINAL_SEMANTIC_ARROW_ACKNOWLEDGEMENT =
+  '{"type":"terminal_key_mode","semantic_arrows":true}';
 
 type Props = {
   bridgeId: string;
@@ -238,6 +241,7 @@ export function TerminalView({
   const rendererGenerationRef = useRef(0);
   const rendererReadyRef = useRef<TerminalRendererReady | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const semanticArrowsRef = useRef(false);
   const requestReconnectRef = useRef<(reason: ReconnectReason) => void>(() => {});
   const terminalInputBlockedRef = useRef(false);
   const uploadInputId = useId();
@@ -522,6 +526,23 @@ export function TerminalView({
     [flushBatchedTerminalInput, scheduleBatchedTerminalInputFlush, sendTerminalInputFrame],
   );
 
+  const sendTerminalArrowKey = useCallback((key: TerminalArrowKey) => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN || !semanticArrowsRef.current) {
+      return false;
+    }
+    flushBatchedTerminalInput();
+    socket.send(JSON.stringify({ type: "key", key }));
+    return true;
+  }, [flushBatchedTerminalInput]);
+
+  const sendTerminalControlInput = useCallback((data: string) => {
+    const arrow = terminalArrowFromLegacyBytes(data);
+    if (!arrow || !sendTerminalArrowKey(arrow)) {
+      sendTerminalInputData(data);
+    }
+  }, [sendTerminalArrowKey, sendTerminalInputData]);
+
   useEffect(() => {
     if (terminalInputBatchDelayMs <= 0) {
       flushBatchedTerminalInput();
@@ -563,6 +584,16 @@ export function TerminalView({
     }
 
     host.replaceChildren();
+    const onTerminalKeyDown = (event: globalThis.KeyboardEvent) => {
+      const key = modeAwareArrowKey(event);
+      if (!key || !sendTerminalArrowKey(key)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+    host.addEventListener("keydown", onTerminalKeyDown, { capture: true });
     let disposed = false;
     let disposeInput: (() => void) | null = null;
     let disposeScroll: (() => void) | null = null;
@@ -668,6 +699,7 @@ export function TerminalView({
 
     return () => {
       disposed = true;
+      host.removeEventListener("keydown", onTerminalKeyDown, { capture: true });
       flushBatchedTerminalInput();
       batchedInputRef.current = emptyTerminalInputBatch();
       clearQueuedTerminalInput();
@@ -697,6 +729,7 @@ export function TerminalView({
     measureTerminal,
     pane?.terminal_id,
     sendTerminalInputData,
+    sendTerminalArrowKey,
   ]);
 
   useEffect(() => {
@@ -847,6 +880,7 @@ export function TerminalView({
       );
       socket = nextSocket;
       socketRef.current = nextSocket;
+      semanticArrowsRef.current = false;
       nextSocket.binaryType = "arraybuffer";
       socketStartedAt = performance.now();
       setConnectionState("connecting");
@@ -892,6 +926,10 @@ export function TerminalView({
           return;
         }
         if (typeof event.data === "string") {
+          if (event.data === TERMINAL_SEMANTIC_ARROW_ACKNOWLEDGEMENT) {
+            semanticArrowsRef.current = true;
+            return;
+          }
           if (isTerminalOutputGzipAcknowledgement(event.data)) {
             gzipOutputAcknowledged = true;
             return;
@@ -1578,7 +1616,7 @@ export function TerminalView({
           mobileFocusAfterSubmit={mobileCommandFocusAfterSubmit}
           controlsScalePercent={mobileControls ? mobileControlsScalePercent : 100}
           onControlsHeightChange={setCommandControlsHeight}
-          onInput={sendTerminalInputData}
+          onInput={sendTerminalControlInput}
           onTerminalFocus={() => rendererRef.current?.focusTextInput()}
           onUpload={openFilePicker}
           onStageCommand={(command) => enqueueTerminalInput([command])}
@@ -2204,6 +2242,31 @@ function terminalSocketUrl(
     params.set("output_encoding", "gzip");
   }
   return wsUrl("/ws/terminal", params);
+}
+
+export function modeAwareArrowKey(
+  event: Pick<globalThis.KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey" | "isComposing">,
+): TerminalArrowKey | null {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing) {
+    return null;
+  }
+  switch (event.key) {
+    case "ArrowUp": return "up";
+    case "ArrowDown": return "down";
+    case "ArrowLeft": return "left";
+    case "ArrowRight": return "right";
+    default: return null;
+  }
+}
+
+function terminalArrowFromLegacyBytes(data: string): TerminalArrowKey | null {
+  switch (data) {
+    case "\x1b[A": return "up";
+    case "\x1b[B": return "down";
+    case "\x1b[D": return "left";
+    case "\x1b[C": return "right";
+    default: return null;
+  }
 }
 
 async function copyToClipboard(text: string) {
