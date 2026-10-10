@@ -242,6 +242,7 @@ export function TerminalView({
   const rendererReadyRef = useRef<TerminalRendererReady | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const semanticArrowsRef = useRef(false);
+  const terminalPasteSerialRef = useRef(0);
   const requestReconnectRef = useRef<(reason: ReconnectReason) => void>(() => {});
   const terminalInputBlockedRef = useRef(false);
   const uploadInputId = useId();
@@ -1484,13 +1485,56 @@ export function TerminalView({
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLElement>) => {
+    if (hostRef.current?.contains(event.target as Node)) {
+      terminalPasteSerialRef.current += 1;
+    }
     const files = uploadCandidatesFromClipboard(event.clipboardData);
-    if (files.length === 0) {
+    if (files.length > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      void uploadAndInsert(files);
       return;
     }
+    if (!hostRef.current?.contains(event.target as Node) || !rendererRef.current) {
+      return;
+    }
+    const text = event.clipboardData.getData("text/plain");
+    if (!text) return;
     event.preventDefault();
     event.stopPropagation();
-    void uploadAndInsert(files);
+    rendererRef.current.pasteText(text);
+  };
+
+  const handleTerminalClipboardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const host = hostRef.current;
+    const renderer = rendererRef.current;
+    if (!host?.contains(event.target as Node) || !renderer ||
+        !navigator.platform.startsWith("Mac") || !event.metaKey || event.ctrlKey ||
+        event.altKey || event.shiftKey || event.repeat) return;
+    if (event.code === "KeyC") {
+      const selection = renderer.getSelectionText();
+      if (!selection) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void copyText(selection, "Copied selection");
+      return;
+    }
+    if (event.code === "KeyV" && navigator.clipboard?.readText) {
+      // Native paste normally follows this keydown. The clipboard read covers
+      // windows where Ghostty's hidden textarea does not receive that event.
+      const pasteSerial = terminalPasteSerialRef.current;
+      const terminalId = terminalIdRef.current;
+      window.setTimeout(() => {
+        if (terminalPasteSerialRef.current !== pasteSerial ||
+            rendererRef.current !== renderer || terminalIdRef.current !== terminalId) return;
+        void navigator.clipboard.readText().then((text) => {
+          if (text && terminalPasteSerialRef.current === pasteSerial &&
+              rendererRef.current === renderer && terminalIdRef.current === terminalId) {
+            renderer.pasteText(text);
+          }
+        }).catch(() => {});
+      }, 0);
+    }
   };
 
   const handleDrop = (event: DragEvent<HTMLElement>) => {
@@ -1543,6 +1587,7 @@ export function TerminalView({
       }}
       onDropCapture={handleDrop}
       onPasteCapture={handlePaste}
+      onKeyDownCapture={handleTerminalClipboardKeyDown}
     >
       <div ref={hostRef} className="terminal-host" />
       {pane && terminalScreenReaderText ? (

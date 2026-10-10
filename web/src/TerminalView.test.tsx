@@ -15,6 +15,8 @@ const REFRESHED_TERMINAL_SIZE: TerminalSize = { cols: 120, rows: 48 };
 
 class FakeTerminalRenderer implements TerminalRenderer {
   readonly refreshedSizes: TerminalSize[] = [];
+  readonly pastedText: string[] = [];
+  selectionText = "";
   private pendingMountCompletion: (() => void) | null = null;
 
   mount() {
@@ -68,6 +70,10 @@ class FakeTerminalRenderer implements TerminalRenderer {
   focus() {}
 
   focusTextInput() {}
+
+  getSelectionText() { return this.selectionText; }
+
+  pasteText(text: string) { this.pastedText.push(text); }
 
   clearSelection() {}
 
@@ -158,6 +164,62 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("terminal clipboard shortcuts", () => {
+  it("copies the terminal selection and pastes text without relying on Ghostty's hidden input", async () => {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const readText = vi.fn().mockResolvedValue("clipboard fallback");
+    vi.stubGlobal("navigator", Object.assign(Object.create(navigator), {
+      clipboard: { writeText, readText },
+    }));
+    const drafts = createCommandDraftStore();
+    await renderTerminalView(testPane("terminal-1"), drafts, false);
+    await act(async () => {
+      terminalRenderers[0]?.completeMount();
+      await Promise.resolve();
+    });
+    const renderer = terminalRenderers[0];
+    const host = document.querySelector<HTMLDivElement>(".terminal-host");
+    if (!renderer || !host) throw new Error("Expected terminal renderer and host");
+    renderer.selectionText = "selected output";
+    const copy = new KeyboardEvent("keydown", {
+      key: "c", code: "KeyC", metaKey: true, bubbles: true, cancelable: true,
+    });
+    await act(async () => { host.dispatchEvent(copy); await Promise.resolve(); });
+    expect(copy.defaultPrevented).toBe(true);
+    expect(writeText).toHaveBeenCalledWith("selected output");
+
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", {
+      value: { items: [], getData: (format: string) => format === "text/plain" ? "pasted input" : "" },
+    });
+    await act(async () => { host.dispatchEvent(paste); });
+    expect(paste.defaultPrevented).toBe(true);
+    expect(renderer.pastedText).toEqual(["pasted input"]);
+
+    const pasteKey = new KeyboardEvent("keydown", {
+      key: "v", code: "KeyV", metaKey: true, bubbles: true, cancelable: true,
+    });
+    await act(async () => {
+      host.dispatchEvent(pasteKey);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(renderer.pastedText).toEqual(["pasted input", "clipboard fallback"]);
+    expect(pasteKey.defaultPrevented).toBe(false);
+    expect(readText).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      host.dispatchEvent(pasteKey);
+      host.dispatchEvent(paste);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(renderer.pastedText).toEqual(["pasted input", "clipboard fallback", "pasted input"]);
+    expect(readText).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("mode-aware terminal arrows", () => {

@@ -60,6 +60,9 @@
 
 ### Fixed
 
+- Restore Cmd+C selection copying and Cmd+V text paste in terminal panes, including when
+  Ghostty's hidden input misses the native paste event.
+
 - Route unmodified terminal arrow keys through Herdr's pane-aware key encoder so already-running
   curses apps receive the right cursor sequences after Herdr Web attaches.
 

@@ -159,6 +159,8 @@ export type TerminalRenderer = {
   setTheme(theme: TerminalTheme): void;
   focus(): void;
   focusTextInput(): void;
+  getSelectionText(): string;
+  pasteText(text: string): void;
   clearSelection(): void;
   setScrollSensitivity(value: number): void;
   dispose(): void;
@@ -367,6 +369,14 @@ export class GhosttyRenderer implements TerminalRenderer {
         }
       }
     }, 0);
+  }
+
+  getSelectionText() {
+    return this.#terminal?.getSelection() ?? "";
+  }
+
+  pasteText(text: string) {
+    this.#terminal?.paste(text);
   }
 
   clearSelection() {
