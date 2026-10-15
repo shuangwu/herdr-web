@@ -115,6 +115,36 @@ type GhosttySelectionManagerAccess = {
 type GhosttyIdleRenderLoopAccess = {
   animationFrameId?: number;
 };
+
+// ghostty-web 0.4.0 registers a document mousedown listener while opening its
+// selection manager, but does not remove that listener on dispose. It retains
+// the selection manager and its WASM terminal after every pane switch.
+export function trackOpenDocumentMouseDownListeners(target: EventTarget, open: () => void) {
+  const listeners: Array<{
+    listener: EventListenerOrEventListenerObject;
+    options?: boolean | AddEventListenerOptions;
+  }> = [];
+  const originalAddEventListener = target.addEventListener;
+  const cleanup = () => {
+    for (const { listener, options } of listeners) {
+      target.removeEventListener("mousedown", listener, options);
+    }
+    listeners.length = 0;
+  };
+  target.addEventListener = ((type, listener, options) => {
+    if (type === "mousedown" && listener) listeners.push({ listener, options });
+    originalAddEventListener.call(target, type, listener, options);
+  }) as EventTarget["addEventListener"];
+  let opened = false;
+  try {
+    open();
+    opened = true;
+  } finally {
+    target.addEventListener = originalAddEventListener;
+    if (!opened) cleanup();
+  }
+  return cleanup;
+}
 type GhosttyRenderAccess = {
   renderer?: Terminal["renderer"];
   wasmTerm?: Terminal["wasmTerm"];
@@ -193,6 +223,7 @@ export class GhosttyRenderer implements TerminalRenderer {
   #eventDrivenRendering: boolean;
   #renderFrameId: number | null = null;
   #renderInteractionCleanup: (() => void) | null = null;
+  #documentMouseDownCleanup: (() => void) | null = null;
   #disposed = false;
 
   constructor(fontSizePx = DEFAULT_TERMINAL_FONT_SIZE_PX, cursorBlink = true,
@@ -222,7 +253,9 @@ export class GhosttyRenderer implements TerminalRenderer {
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.open(container);
+    this.#documentMouseDownCleanup = trackOpenDocumentMouseDownListeners(document, () => {
+      terminal.open(container);
+    });
     if (this.#eventDrivenRendering) {
       suspendGhosttyIdleRenderLoop(terminal);
       this.#renderInteractionCleanup = installTerminalInteractionRendering(
@@ -408,8 +441,13 @@ export class GhosttyRenderer implements TerminalRenderer {
     this.#disposeAccessibleScreenPublisher();
     this.#fitAddon?.dispose();
     this.#fitAddon = null;
-    this.#terminal?.dispose();
-    this.#terminal = null;
+    try {
+      this.#terminal?.dispose();
+    } finally {
+      this.#terminal = null;
+      this.#documentMouseDownCleanup?.();
+      this.#documentMouseDownCleanup = null;
+    }
     this.#container = null;
   }
 

@@ -6,7 +6,39 @@ import {
   refreshTerminalFontRendering,
   shouldUseEventDrivenTerminalRendering,
   suspendGhosttyIdleRenderLoop,
+  trackOpenDocumentMouseDownListeners,
 } from "./terminalRenderer";
+
+describe("Ghostty document listener cleanup", () => {
+  it("removes listeners from repeated terminal mounts without removing unrelated listeners", () => {
+    const target = new EventTarget();
+    const leaked = vi.fn();
+    const unrelated = vi.fn();
+    target.addEventListener("mousedown", unrelated);
+    const originalAddEventListener = target.addEventListener;
+    for (let index = 0; index < 100; index += 1) {
+      const cleanup = trackOpenDocumentMouseDownListeners(target, () => {
+        target.addEventListener("mousedown", leaked);
+      });
+      cleanup();
+    }
+    target.dispatchEvent(new Event("mousedown"));
+    expect(leaked).not.toHaveBeenCalled();
+    expect(unrelated).toHaveBeenCalledOnce();
+    expect(target.addEventListener).toBe(originalAddEventListener);
+  });
+
+  it("removes a listener if opening the terminal throws", () => {
+    const target = new EventTarget();
+    const leaked = vi.fn();
+    expect(() => trackOpenDocumentMouseDownListeners(target, () => {
+      target.addEventListener("mousedown", leaked);
+      throw new Error("open failed");
+    })).toThrow("open failed");
+    target.dispatchEvent(new Event("mousedown"));
+    expect(leaked).not.toHaveBeenCalled();
+  });
+});
 
 describe("terminal event-driven rendering", () => {
   it("redraws idle selections and scrolling and removes the hooks on disposal", () => {

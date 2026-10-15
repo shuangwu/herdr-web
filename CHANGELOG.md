@@ -60,6 +60,9 @@
 
 ### Fixed
 
+- Release Ghostty Web's retained document listener when leaving a terminal pane, preventing
+  pane switches from slowing down over time until a reload.
+
 - Restore Cmd+C selection copying and Cmd+V text paste in terminal panes, including when
   Ghostty's hidden input misses the native paste event.
 
