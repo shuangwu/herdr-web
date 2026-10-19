@@ -33,7 +33,7 @@ type ManagedMachine = {
 type Diagnostics = { status: string; sessions: string; integrations: string; configCheck: string };
 type MachineSnapshot = { available: true; checkedAt: string; local: Diagnostics; machines: ManagedMachine[];
   unconfigured: Array<{ id: string; name: string; host: string; session: string; enabled: boolean }> };
-type Action = "restartTunnel" | "startBridge" | "restartBridge" | "repairBridge" | "forceBridge" |
+type Action = "reconnect" | "restartTunnel" | "startBridge" | "restartBridge" | "repairBridge" | "forceBridge" |
   "rename" | "enable" | "disable" | "remove" | "provision";
 
 async function requestMachines(): Promise<MachineSnapshot> {
@@ -107,6 +107,7 @@ export function MachinesDialog({ onClose }: { onClose: () => void }) {
     const backend = browserBackend(machine);
     if (!backend) return;
     if (action === "remove") bridge.deleteBackend(backend.id);
+    else if (action === "reconnect") bridge.retryBridgeProbe(backend.id);
     else if (action === "disable" || action === "enable") bridge.setBridgeEnabled(backend.id, action === "enable");
     else if (action === "rename" && rename) await bridge.updateBackend(backend.id, { name: rename.value, baseUrl: backend.baseUrl });
   };
@@ -172,6 +173,7 @@ export function MachinesDialog({ onClose }: { onClose: () => void }) {
           {machine.remote?.stalePaneCount ? <p className="machines-warning">{machine.remote.stalePaneCount} pane shell(s) inherited an expired SSH agent socket. Recreate those idle panes after reconnecting Herdr; do not restart a working agent.</p> : null}
           {diagnosis.layer === "authentication" || diagnosis.layer === "network" ? <p className="machines-warning">Complete VPN or SSH authentication in a terminal, then reconnect the tunnel here.</p> : null}
           <div className="machine-actions">
+            {diagnosis.state !== "live" ? <button className="btn btn-primary" type="button" disabled={busy || !machine.enabled} onClick={() => void act("reconnect", machine)}>Reconnect</button> : null}
             {!backend && machine.snapshot ? <button className="btn" type="button" disabled={busy} onClick={() => void syncBrowser("add", null, { id: machine.id, name: machine.name }).then(refresh).catch((caught) => setError(String(caught)))}>Add browser profile</button> : null}
             <button className="btn" type="button" disabled={busy} onClick={() => void act("restartTunnel", machine)}>Reconnect tunnel</button>
             <button className="btn" type="button" disabled={busy} onClick={() => void act("startBridge", machine)}>Start bridge</button>

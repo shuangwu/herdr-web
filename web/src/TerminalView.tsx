@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import type { ChangeEvent, ClipboardEvent, CSSProperties, DragEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
+import type { ChangeEvent, ClipboardEvent, CSSProperties, DragEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
 import { autosizeMobileCommandTextarea } from "./mobileCommandTextarea";
 import {
   encodeMobileTerminalChord,
@@ -140,6 +140,7 @@ type Props = {
   selected?: boolean;
   /** Creates a terminal renderer for each mounted terminal pane. */
   createTerminalRenderer?: TerminalRendererFactory;
+  emptyState?: ReactNode;
 };
 
 type UploadConflictState = {
@@ -232,6 +233,7 @@ export function TerminalView({
   accessibilityLabel = "Terminal",
   selected = false,
   createTerminalRenderer = createGhosttyTerminalRenderer,
+  emptyState,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLElement | null>(null);
@@ -1589,7 +1591,7 @@ export function TerminalView({
       onPasteCapture={handlePaste}
       onKeyDownCapture={handleTerminalClipboardKeyDown}
     >
-      <div ref={hostRef} className="terminal-host" />
+      <div ref={hostRef} className="terminal-host" style={!pane ? { display: "none" } : undefined} />
       {pane && terminalScreenReaderText ? (
         <div
           className="terminal-accessible-screen sr-only"
@@ -1610,7 +1612,7 @@ export function TerminalView({
         disabled={uploadDisabled}
         onChange={handleFileInput}
       />
-      {!pane ? <div className="terminal-overlay">No panes available</div> : null}
+      {!pane ? emptyState ?? <div className="terminal-overlay">Create a new pane to start working.</div> : null}
       {pane && showConnectionOverlay && connectionState !== "attached" ? (
         <div className="terminal-overlay">
           {terminalConnectionCopy(connectionState, closeReason, hasAttachedForTerminal)}
@@ -1621,7 +1623,7 @@ export function TerminalView({
           {uploadStatus}
         </div>
       ) : null}
-      {!mobileControls ? (
+      {!mobileControls && pane ? (
         <button
           className="terminal-upload-fab"
           type="button"

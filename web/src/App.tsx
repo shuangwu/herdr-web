@@ -100,6 +100,7 @@ import { PaneToolsDialog } from "./PaneToolsDialog";
 import { WorktreesDialog } from "./WorktreesDialog";
 import { firstPaneLaunchTarget, resolveLaunchSpec } from "./launch";
 import { EmptyHost } from "./EmptyHost";
+import { managedMachineId, reconnectManagedMachine } from "./machineConnection";
 import type { LaunchTarget } from "./launch";
 import { fetchLauncherPresets, supportsLauncherPresets } from "./launcherPresets";
 import type { LauncherPresetsResponse } from "./launcherPresets";
@@ -2245,6 +2246,13 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     () => snapshot?.panes.find((pane) => pane.pane_id === resolvedPaneId) ?? null,
     [snapshot, resolvedPaneId],
   );
+  const paneConnectionStatus = !selectedRuntime || !selectedRuntime.canConnect || loadState === "error"
+    ? "unavailable" : !snapshot ? "connecting" : "ready";
+  const paneLaunchAvailable = paneConnectionStatus === "ready" && supportsLauncherPresets(selectedRuntime?.capabilities);
+  const paneLaunchUnavailableReason = paneConnectionStatus === "unavailable"
+    ? "Reconnect this host before creating a pane."
+    : paneConnectionStatus === "connecting" ? "Waiting for the host connection."
+    : !supportsLauncherPresets(selectedRuntime?.capabilities) ? "Update this host’s bridge to enable the launcher." : undefined;
   const selectedAgentPinsState =
     selectedRuntime &&
     agentPinsStates[selectedRuntime.id]?.connectionKey === selectedRuntime.connectionKey
@@ -2548,8 +2556,31 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     return state?.connectionKey === runtime.connectionKey ? state.snapshot : null;
   };
 
-  const openFirstPaneLauncher = (bridgeId: BridgeId) => {
-    const hostSnapshot = snapshotForBridge(bridgeId);
+  const reconnectHost = async (bridgeId: BridgeId) => {
+    const runtime = bridge.getRuntime(bridgeId);
+    if (!runtime) return null;
+    setBusy(true);
+    setError(null);
+    try {
+      const machineId = managedMachineId(runtime.backend?.baseUrl);
+      if (machineId) await reconnectManagedMachine(machineId);
+      bridge.retryBridgeProbe(bridgeId);
+      const next = await refreshBridgeSnapshot(runtime, true);
+      if (!next) throw new Error(`Could not connect to ${runtime.label}. Open Machine settings to diagnose the connection.`);
+      return next;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not reconnect this host");
+      return null;
+    } finally { setBusy(false); }
+  };
+
+  const openFirstPaneLauncher = async (bridgeId: BridgeId) => {
+    const runtime = bridge.getRuntime(bridgeId);
+    if (!runtime) { setError("Select a host before creating a pane."); return; }
+    let hostSnapshot = snapshotForBridge(bridgeId);
+    if (!hostSnapshot || !runtime.canConnect || connectionStates[bridgeId]?.loadState === "error") {
+      hostSnapshot = await reconnectHost(bridgeId);
+    }
     if (!hostSnapshot) return;
     setLaunchTarget({
       ...firstPaneLaunchTarget(hostSnapshot.workspaces,
@@ -3205,13 +3236,13 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       }
 
       if (newPaneShortcut) {
-        if (!selectedRuntime || (!selectedPane && !snapshot) || (selectedPane && !splitSupported)) return;
+        if (!selectedRuntime || (selectedPane && !splitSupported)) return;
         event.preventDefault();
         event.stopPropagation();
         if (selectedPane) {
           setLaunchTarget({ mode: "split", pane: selectedPane, direction: "right", bridgeId: selectedRuntime.id });
         } else {
-          openFirstPaneLauncher(selectedRuntime.id);
+          void openFirstPaneLauncher(selectedRuntime.id);
         }
         return;
       }
@@ -3234,11 +3265,10 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
         if (!selectedRuntime) {
           return;
         }
-        if (!snapshot) return;
         event.preventDefault();
         event.stopPropagation();
         if (selectedRuntime) {
-          openFirstPaneLauncher(selectedRuntime.id);
+          void openFirstPaneLauncher(selectedRuntime.id);
         }
         return;
       }
@@ -4343,6 +4373,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             setLaunchTarget({ mode: "tab", workspaceId, bridgeId })
           }
           onCreatePane={openFirstPaneLauncher}
+          onReconnectHost={(bridgeId) => void reconnectHost(bridgeId)}
           busy={busy}
           onScopedMenu={(kind, bridgeId, id, label, x, y, clearable, pinLabel) =>
             setMenu({ kind, bridgeId, id, label, x, y, clearable, pinLabel })
@@ -4435,6 +4466,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           snapshot={snapshot}
           activeSpace={activeSpace}
           selectedPane={selectedPane}
+          createDisabled={busy || (selectedRuntime?.capabilityState === "ready" && !supportsLauncherPresets(selectedRuntime.capabilities))}
+          onCreatePane={() => selectedRuntime && void openFirstPaneLauncher(selectedRuntime.id)}
           onSelectTab={(tabId) => selectedRuntime && selectTab(selectedRuntime.id, tabId)}
           onCreateTab={(workspaceId) =>
             selectedRuntime &&
@@ -4470,9 +4503,11 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             aria-label="Selected pane actions"
             {...selectedPaneMenuPress}
           >
-            <span className="stage-title">{selectedPane ? paneTitle(selectedPane) : "herdr-web"}</span>
+            <span className="stage-title">{selectedPane ? paneTitle(selectedPane) : selectedRuntime?.label ?? "Choose a host"}</span>
             <span className="stage-sub mono">
-              {stageBreadcrumb(snapshot, selectedPane, loadState, selectedRuntime?.canConnect ?? false)}
+              {selectedPane ? stageBreadcrumb(snapshot, selectedPane, loadState, selectedRuntime?.canConnect ?? false)
+                : paneConnectionStatus === "unavailable" ? "Disconnected · reconnect to view or create panes"
+                : paneConnectionStatus === "connecting" ? "Connecting…" : "Create a shell or agent to get working"}
             </span>
           </div>
           {splitSupported && selectedPane && !isCompactLayout ? (
@@ -4599,16 +4634,16 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
           />
-        ) : renderTerminal && snapshot?.panes.length === 0 && selectedRuntime && loadState === "ready" ? (
-          <section className="terminal-stage" aria-label="Empty host">
-            <EmptyHost hostLabel={selectedRuntime.label} busy={busy}
-              launchAvailable={supportsLauncherPresets(selectedRuntime.capabilities)}
-              onCreatePane={() => openFirstPaneLauncher(selectedRuntime.id)} />
-          </section>
         ) : renderTerminal ? (
           <TerminalView
             bridgeId={selectedRuntime?.id ?? ""}
             pane={selectedPane}
+            emptyState={<EmptyHost hostLabel={selectedRuntime?.label ?? "a host"} busy={busy}
+              connectionStatus={paneConnectionStatus} unavailableReason={paneLaunchUnavailableReason}
+              launchAvailable={paneLaunchAvailable}
+              onCreatePane={() => selectedRuntime && void openFirstPaneLauncher(selectedRuntime.id)}
+              onReconnect={selectedRuntime ? () => void reconnectHost(selectedRuntime.id) : undefined}
+              onManageMachines={() => setMachinesOpen(true)} />}
             connectionKey={selectedRuntime?.connectionKey ?? "disconnected"}
             resumeToken={selectedRuntime?.resumeToken ?? 0}
             httpUrl={selectedHttpUrl}
@@ -6523,7 +6558,7 @@ function SplitGrid({
   );
 }
 
-function TabBar({
+export function TabBar({
   bridgeId,
   numberedTabs,
   snapshot,
@@ -6531,6 +6566,8 @@ function TabBar({
   selectedPane,
   onSelectTab,
   onCreateTab,
+  onCreatePane,
+  createDisabled = false,
   onMenu,
 }: {
   bridgeId: BridgeId | null;
@@ -6540,6 +6577,8 @@ function TabBar({
   selectedPane: PaneInfo | null;
   onSelectTab: (tabId: string) => void;
   onCreateTab: (workspaceId: string) => void;
+  onCreatePane: () => void;
+  createDisabled?: boolean;
   onMenu: (
     kind: MenuKind,
     id: string,
@@ -6549,22 +6588,17 @@ function TabBar({
     clearable?: boolean,
   ) => void;
 }) {
-  if (!snapshot || !activeSpace) {
-    return null;
-  }
-  const tabs = sortTabsForWorkspace(snapshot.tabs, activeSpace.workspace_id);
-  if (tabs.length === 0) {
-    return null;
-  }
+  if (!bridgeId) return null;
+  const tabs = snapshot && activeSpace ? sortTabsForWorkspace(snapshot.tabs, activeSpace.workspace_id) : [];
   const activeTabId =
-    selectedPane && selectedPane.workspace_id === activeSpace.workspace_id
+    selectedPane && selectedPane.workspace_id === activeSpace?.workspace_id
       ? selectedPane.tab_id
-      : activeSpace.active_tab_id;
+      : activeSpace?.active_tab_id;
   return (
     <div className="tabbar">
       <div className="tabbar-scroll" role="tablist" aria-label="Tabs">
         {tabs.map((tab) => {
-          const label = displayTabLabel(tab, snapshot.panes);
+          const label = displayTabLabel(tab, snapshot?.panes ?? []);
           const numberedIndex = numberedTabs.findIndex(
             (entry) => entry.bridgeId === bridgeId && entry.tab.tab_id === tab.tab_id,
           );
@@ -6605,11 +6639,13 @@ function TabBar({
       <button
         className="tabbar-add"
         type="button"
-        aria-label="New tab"
-        title="New tab (⌘N)"
+        aria-label={selectedPane ? "New tab" : "New pane"}
+        title={selectedPane ? "New tab (⌘N)" : "New pane (⌘N or ⌘T)"}
+        disabled={createDisabled}
         onClick={(event) => {
           focusOverlayTrigger(event.currentTarget);
-          onCreateTab(activeSpace.workspace_id);
+          if (selectedPane && activeSpace) onCreateTab(activeSpace.workspace_id);
+          else onCreatePane();
         }}
       >
         <Plus size={14} />
@@ -6681,6 +6717,7 @@ function Switcher({
   onCreateSpace,
   onCreateTab,
   onCreatePane,
+  onReconnectHost,
   busy,
   onScopedMenu,
 }: {
@@ -6751,6 +6788,7 @@ function Switcher({
   onCreateSpace: () => void;
   onCreateTab: (bridgeId: BridgeId, workspaceId: string) => void;
   onCreatePane: (bridgeId: BridgeId) => void;
+  onReconnectHost: (bridgeId: BridgeId) => void;
   busy: boolean;
   onScopedMenu: (
     kind: MenuKind,
@@ -7961,7 +7999,13 @@ function Switcher({
       </div>
 
       <div className="list" ref={spaceListRef}>
-        {!hasListSnapshot ? (
+        {!hasListSnapshot && hostScope === "selected" && selectedBridgeId ? (
+          <EmptyHost compact hostLabel={bridgeLabel} busy={busy} launchAvailable={false}
+            connectionStatus={loadState === "loading" && bridgeCanConnect ? "connecting" : "unavailable"}
+            onReconnect={() => onReconnectHost(selectedBridgeId)} onManageMachines={onMachines}
+            unavailableReason="Reconnect this host before creating a pane."
+            onCreatePane={() => onCreatePane(selectedBridgeId)} />
+        ) : !hasListSnapshot ? (
           <div className="empty">
             <strong>
               {bridgeViews.length === 0

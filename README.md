@@ -391,6 +391,8 @@ new-tab and close bindings remain available; `Cmd/Option+Shift+-` splits right d
 The new-tab and new-pane shortcuts open the launcher so you can choose a shell or agent preset.
 Select an empty host and click **New pane**, or use `Cmd+N` / `Cmd+T`, to open the same launcher.
 If the host has no Spaces, the app creates one for the new pane after you click Create.
+The top-right **+** remains available on empty hosts. If a managed host is disconnected, use
+**Reconnect** to start its Herdr server and bridge and restore its SSH tunnel before launching.
 Within the sidebar, use Up/Down to move between rows, Enter to select, Shift+F10 or the Menu key
 for row actions, and Escape to return to the terminal. Dialogs and menus support Tab and Escape.
 The command palette shows shortcuts beside actions and numbered tabs when available; search for

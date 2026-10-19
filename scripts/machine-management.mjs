@@ -42,6 +42,25 @@ except Exception: pass
 _, logs = run(['journalctl', '--user', '-u', 'herdr-web-remote.service', '-n', '12', '--no-pager'])
 print(json.dumps({'forwardedAgent': code == 0, 'agentDetail': identities[:240], 'server': server, 'status': status, 'sessions': sessions, 'integrations': integrations, 'configCheck': config_check, 'bridgeService': service, 'stableAgent': stable, 'stalePaneCount': stale, 'logs': logs[-2500:]}))`;
 
+const REMOTE_RECONNECT = `import os, subprocess, sys, time
+session = sys.argv[1]
+herdr = os.path.expanduser('~/.local/bin/herdr')
+args = [herdr] + (['--session', session] if session != 'default' else [])
+def running():
+ result = subprocess.run(args + ['status', 'server'], capture_output=True, text=True, timeout=4)
+ return result.returncode == 0 and 'status: running' in result.stdout
+if not running():
+ unit = 'herdr-web-session-' + session
+ active = subprocess.run(['systemctl', '--user', 'is-active', unit], capture_output=True, text=True).returncode == 0
+ if not active:
+  subprocess.run(['systemd-run', '--user', '--collect', '--unit=' + unit, '--property=Restart=on-failure'] + args + ['server'], check=True, capture_output=True, text=True)
+ deadline = time.monotonic() + 12
+ while not running():
+  if time.monotonic() >= deadline: raise RuntimeError('Herdr server did not become ready; check its session logs')
+  time.sleep(0.25)
+subprocess.run(['systemctl', '--user', 'start', 'herdr-web-remote.service'], check=True, capture_output=True, text=True)
+print('Herdr server and bridge started')`;
+
 export function parseMachineList(output) {
   return output.trim().split("\n").filter(Boolean).map((line) => {
     const [id, name, host, session, state] = line.split("\t");
@@ -185,6 +204,17 @@ export function createMachineManager(configPath, { run = command, remoteProbe = 
       }
       const remote = findRemote(config, body.id);
       const profile = profileFor(remote, saved);
+      if (body.action === "reconnect") {
+        if (remote.enabled === false) throw new Error("Enable this machine before reconnecting");
+        await run("/usr/bin/ssh", [...SSH, remote.host, `python3 -c ${shellQuote(REMOTE_RECONNECT)} ${shellQuote(remote.session)}`], 30000);
+        await startTunnel(remote);
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          const health = await httpProbe(remote.localPort);
+          if (health.snapshot) return { message: `${remote.name} is connected` };
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        throw new Error(`${remote.name} started, but its bridge is not reachable yet. Check machine diagnostics.`);
+      }
       if (body.action === "restartTunnel") {
         await startTunnel(remote);
         return { message: `Restarted ${remote.name} tunnel` };

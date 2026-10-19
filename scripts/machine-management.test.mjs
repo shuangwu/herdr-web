@@ -44,3 +44,27 @@ test("host discovery validates the target and rename persists the managed label"
     assert.ok(calls.some(([bin, args]) => bin === "herdr" && args.join(" ") === `machine rename --label Tiebiao ${id}`));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("reconnect starts the configured session and bridge, reconnects its tunnel, and verifies the snapshot", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "herdr-reconnect-"));
+  const configPath = path.join(directory, "config.json");
+  const id = "1234abcd";
+  await writeFile(configPath, JSON.stringify({ port: 5173, bridgePort: 8787, remotes: [
+    { id, name: "Long", host: "zl", session: "default", localPort: 18787 },
+  ] }));
+  const calls = [];
+  const ports = [];
+  const manager = createMachineManager(configPath, {
+    run: async (bin, args) => { calls.push([bin, args]); return bin === "herdr" ? `${id}\tLong\tzl\tdefault\tenabled\n` : ""; },
+    httpProbe: async (port) => { ports.push(port); return { tunnel: true, snapshot: true }; },
+  });
+  try {
+    assert.equal((await manager.action({ action: "reconnect", id })).message, "Long is connected");
+    const ssh = calls.find(([bin]) => bin === "/usr/bin/ssh");
+    assert.equal(ssh[1].at(-2), "zl");
+    assert.match(ssh[1].at(-1), /herdr-web-remote.service/);
+    assert.match(ssh[1].at(-1), /if not running/);
+    assert.ok(calls.some(([bin, args]) => bin === "launchctl" && args.includes(`gui/${process.getuid()}/local.herdr-web.tunnel.${id}`)));
+    assert.deepEqual(ports, [18787]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

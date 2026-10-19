@@ -63,6 +63,10 @@
 
 ### Fixed
 
+- Keep the top-right pane creation control visible on empty hosts, replace the terminal's passive
+  empty message with creation or connection recovery actions, and reconnect stopped remote Herdr
+  servers, bridges, and tunnels together.
+
 - Release Ghostty Web's retained document listener when leaving a terminal pane, preventing
   pane switches from slowing down over time until a reload.
 
