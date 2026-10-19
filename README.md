@@ -377,7 +377,7 @@ new-tab and close bindings remain available; `Cmd/Option+Shift+-` splits right d
 | --- | --- | --- |
 | Open command palette / shortcut help | `Cmd+K` / `Cmd+/` | `Meta+K` / `Meta+/` |
 | Create a tab in the active Space | `Cmd+N` or `Cmd/Option+Shift+T` | `Meta+N` or `Meta/Alt+Shift+T` |
-| Create a pane split to the right | `Cmd+T` | `Meta+T` |
+| Create a pane, or split the current pane to the right | `Cmd+T` | `Meta+T` |
 | Confirm close for the selected pane, or its tab when it is the last pane | `Cmd+W` or `Cmd/Option+Shift+X` | `Meta+W` or `Meta/Alt+Shift+X` |
 | Select previous/next agent pane | `Cmd/Option+Shift+Up/Down` | `Meta/Alt+Shift+Up/Down` |
 | Select previous/next tab in the active space | `Cmd/Option+Shift+Left/Right` | `Meta/Alt+Shift+Left/Right` |
@@ -389,6 +389,8 @@ new-tab and close bindings remain available; `Cmd/Option+Shift+-` splits right d
 | Split selected pane right | `Cmd/Option+Shift+-` | `Meta/Alt+Shift+-` |
 
 The new-tab and new-pane shortcuts open the launcher so you can choose a shell or agent preset.
+Select an empty host and click **New pane**, or use `Cmd+N` / `Cmd+T`, to open the same launcher.
+If the host has no Spaces, the app creates one for the new pane after you click Create.
 Within the sidebar, use Up/Down to move between rows, Enter to select, Shift+F10 or the Menu key
 for row actions, and Escape to return to the terminal. Dialogs and menus support Tab and Escape.
 The command palette shows shortcuts beside actions and numbered tabs when available; search for

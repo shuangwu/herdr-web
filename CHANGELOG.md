@@ -6,6 +6,9 @@
 
 ### Added
 
+- Offer the usual shell/agent launcher from empty hosts, with a New pane button and Cmd+N/Cmd+T.
+  Create a Space automatically when needed, using existing remote bridge commands.
+
 - Show available shortcuts beside command-palette results and context-menu actions, expose common
   selected-item actions and sidebar focus in the palette, and show icon tooltips on keyboard focus.
 

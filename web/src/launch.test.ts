@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { resolveLaunchSpec } from "./launch";
+import { firstPaneLaunchTarget, resolveLaunchSpec } from "./launch";
 import { shellCommand, shellQuote } from "./shell";
-import type { PaneInfo } from "./types";
+import type { PaneInfo, WorkspaceInfo } from "./types";
 
 const pane = (pane_id: string, label?: string, display_agent?: string) =>
   ({
@@ -17,6 +17,16 @@ const pane = (pane_id: string, label?: string, display_agent?: string) =>
   }) satisfies PaneInfo;
 
 describe("launch helpers", () => {
+  it("starts in a new Space only when the selected host has no Spaces", () => {
+    expect(firstPaneLaunchTarget([])).toEqual({ mode: "workspace" });
+    const spaces = [
+      { workspace_id: "first", focused: false },
+      { workspace_id: "focused", focused: true },
+    ] as WorkspaceInfo[];
+    expect(firstPaneLaunchTarget(spaces)).toEqual({ mode: "tab", workspaceId: "focused" });
+    expect(firstPaneLaunchTarget(spaces, "first")).toEqual({ mode: "tab", workspaceId: "first" });
+    expect(firstPaneLaunchTarget(spaces, "stale-id")).toEqual({ mode: "tab", workspaceId: "focused" });
+  });
   it("keeps custom launch titles", () => {
     expect(resolveLaunchSpec({
       presetId: "builtin:codex",

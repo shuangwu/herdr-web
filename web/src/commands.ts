@@ -70,6 +70,46 @@ async function runLaunchPreset(
   return (await response.json()) as LaunchPresetResult;
 }
 
+async function launchPresetWorkspace(httpUrl: BridgeHttpUrl, spec: LaunchSpec): Promise<LaunchPresetResult> {
+  const created = await runCommand(httpUrl, "workspace.create", { focus: true });
+  const workspace = created.workspace as { workspace_id?: string } | undefined;
+  const tab = created.tab as { tab_id?: string } | undefined;
+  const pane = created.root_pane as { pane_id?: string } | undefined;
+  if (!workspace?.workspace_id || !tab?.tab_id || !pane?.pane_id) {
+    throw new Error("Space creation returned an incomplete pane. Refresh the host before retrying.");
+  }
+  const workspaceId = workspace.workspace_id;
+  let launched: LaunchPresetResult;
+  try {
+    if (spec.presetId === "builtin:shell") {
+      await runCommand(httpUrl, "pane.rename", { pane_id: pane.pane_id, label: spec.title });
+      return {
+        preset_id: spec.presetId, title: spec.title, workspace_id: workspaceId,
+        tab_id: tab.tab_id, pane_id: pane.pane_id,
+      };
+    }
+    launched = await runLaunchPreset(httpUrl, {
+      preset_id: spec.presetId, title: spec.title,
+      target: { mode: "tab", workspace_id: workspaceId },
+    });
+  } catch (error) {
+    try {
+      await runCommand(httpUrl, "workspace.close", { workspace_id: workspaceId, close_group: false });
+    } catch (cleanupError) {
+      throw new Error(`${error instanceof Error ? error.message : "Launch failed"}. Could not remove the new Space: ${cleanupError instanceof Error ? cleanupError.message : "cleanup failed"}`);
+    }
+    throw error;
+  }
+  // Older remote bridges already support these operations. Reuse their normal
+  // preset launch path, then remove only the shell tab created for this Space.
+  try {
+    await runCommand(httpUrl, "tab.close", { tab_id: tab.tab_id });
+  } catch (error) {
+    return { ...launched, warning: `Pane created, but the initial Shell tab could not be closed: ${error instanceof Error ? error.message : "cleanup failed"}` };
+  }
+  return launched;
+}
+
 /** Pull a pane id out of a {workspace,tab}_created result so the UI can jump to it. */
 export function createdPaneId(result: CommandResult): string | null {
   const paneId = typeof result.pane_id === "string" ? result.pane_id : null;
@@ -91,6 +131,7 @@ export function createdPaneId(result: CommandResult): string | null {
 
 export function createCommands(httpUrl: BridgeHttpUrl = sameOriginHttpUrl) {
   const api = {
+    launchPresetWorkspace: (spec: LaunchSpec) => launchPresetWorkspace(httpUrl, spec),
     createWorkspace: (sourceWorkspaceId?: string) =>
       runCommand(httpUrl, "workspace.create", {
         focus: true,

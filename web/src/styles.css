@@ -1852,6 +1852,24 @@ button {
 
 /* ------------------------------------------------------------ terminal */
 
+.empty-host {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--subtext0);
+}
+
+.empty-host strong { color: var(--text); font-size: 18px; }
+.empty-host p { margin: 0; }
+.empty-host > span { font-size: 12px; }
+.empty-host-compact { flex: 0 0 auto; padding: 24px 12px; gap: 10px; font-size: 12px; }
+.empty-host-compact strong { font-size: 13px; }
+
 .terminal-stage {
   --terminal-command-controls-height: calc(82px * var(--mobile-controls-scale));
   position: relative;

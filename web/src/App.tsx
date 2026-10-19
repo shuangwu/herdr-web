@@ -98,7 +98,8 @@ import { LaunchDialog } from "./LaunchDialog";
 import { MachinesDialog } from "./MachinesDialog";
 import { PaneToolsDialog } from "./PaneToolsDialog";
 import { WorktreesDialog } from "./WorktreesDialog";
-import { resolveLaunchSpec } from "./launch";
+import { firstPaneLaunchTarget, resolveLaunchSpec } from "./launch";
+import { EmptyHost } from "./EmptyHost";
 import type { LaunchTarget } from "./launch";
 import { fetchLauncherPresets, supportsLauncherPresets } from "./launcherPresets";
 import type { LauncherPresetsResponse } from "./launcherPresets";
@@ -2547,6 +2548,16 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     return state?.connectionKey === runtime.connectionKey ? state.snapshot : null;
   };
 
+  const openFirstPaneLauncher = (bridgeId: BridgeId) => {
+    const hostSnapshot = snapshotForBridge(bridgeId);
+    if (!hostSnapshot) return;
+    setLaunchTarget({
+      ...firstPaneLaunchTarget(hostSnapshot.workspaces,
+        bridgeId === selectedRuntime?.id ? activeSpace?.workspace_id : activeWorkspacesByBridgeId[bridgeId]),
+      bridgeId,
+    });
+  };
+
   const selectSpace = (bridgeId: BridgeId, workspaceId: string) => {
     const runtime = bridge.getRuntime(bridgeId);
     if (!runtime) {
@@ -3100,7 +3111,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       const numberedTab = numberedTabShortcut(event);
       const closePaneShortcut = isClosePaneShortcut(event);
       const newTabShortcut = isNewTabShortcut(event);
-      const newPaneShortcut = splitSupported && isNewPaneShortcut(event);
+      const newPaneShortcut = isNewPaneShortcut(event);
       const splitDirection = splitSupported ? splitShortcutDirection(event) : null;
       const paneFocusDirection =
         paneFocusSupported || !navigationIsShared
@@ -3194,10 +3205,14 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       }
 
       if (newPaneShortcut) {
-        if (!selectedPane || !selectedRuntime) return;
+        if (!selectedRuntime || (!selectedPane && !snapshot) || (selectedPane && !splitSupported)) return;
         event.preventDefault();
         event.stopPropagation();
-        setLaunchTarget({ mode: "split", pane: selectedPane, direction: "right", bridgeId: selectedRuntime.id });
+        if (selectedPane) {
+          setLaunchTarget({ mode: "split", pane: selectedPane, direction: "right", bridgeId: selectedRuntime.id });
+        } else {
+          openFirstPaneLauncher(selectedRuntime.id);
+        }
         return;
       }
 
@@ -3219,17 +3234,11 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
         if (!selectedRuntime) {
           return;
         }
-        if (!activeSpace) {
-          return;
-        }
+        if (!snapshot) return;
         event.preventDefault();
         event.stopPropagation();
         if (selectedRuntime) {
-          setLaunchTarget({
-            mode: "tab",
-            workspaceId: activeSpace.workspace_id,
-            bridgeId: selectedRuntime.id,
-          });
+          openFirstPaneLauncher(selectedRuntime.id);
         }
         return;
       }
@@ -3731,7 +3740,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           }
         }
       }
-      setError(null);
+      setError(typeof result.warning === "string" ? result.warning : null);
       return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Command failed");
@@ -3943,7 +3952,9 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       (launchTarget.bridgeId === selectedRuntime?.id ? snapshot : null);
     const resolvedSpec = resolveLaunchSpec(spec, launchSnapshot?.panes ?? []);
     const action =
-      launchTarget.mode === "tab"
+      launchTarget.mode === "workspace"
+        ? () => commands.launchPresetWorkspace(resolvedSpec)
+        : launchTarget.mode === "tab"
         ? () => commands.launchPresetTab(launchTarget.workspaceId, resolvedSpec)
         : () =>
             commands.launchPresetSplit(
@@ -3972,6 +3983,13 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       )?.focus());
     } },
   ];
+  if (selectedRuntime && snapshot && !selectedPane && supportsLauncherPresets(selectedRuntime.capabilities)) {
+    paletteEntries.push({
+      id: "action:first-pane", kind: "Action", label: "Create pane", shortcut: "⌘T",
+      detail: selectedRuntime.label,
+      onSelect: () => openFirstPaneLauncher(selectedRuntime.id),
+    });
+  }
   if (selectedRuntime && selectedCommands && activeSpace) {
     if (selectedRuntime.capabilities?.commands.includes("worktree.list")) {
       paletteEntries.push({
@@ -4324,6 +4342,8 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           onCreateTab={(bridgeId, workspaceId) =>
             setLaunchTarget({ mode: "tab", workspaceId, bridgeId })
           }
+          onCreatePane={openFirstPaneLauncher}
+          busy={busy}
           onScopedMenu={(kind, bridgeId, id, label, x, y, clearable, pinLabel) =>
             setMenu({ kind, bridgeId, id, label, x, y, clearable, pinLabel })
           }
@@ -4579,6 +4599,12 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             httpUrl={selectedHttpUrl}
             wsUrl={selectedWsUrl}
           />
+        ) : renderTerminal && snapshot?.panes.length === 0 && selectedRuntime && loadState === "ready" ? (
+          <section className="terminal-stage" aria-label="Empty host">
+            <EmptyHost hostLabel={selectedRuntime.label} busy={busy}
+              launchAvailable={supportsLauncherPresets(selectedRuntime.capabilities)}
+              onCreatePane={() => openFirstPaneLauncher(selectedRuntime.id)} />
+          </section>
         ) : renderTerminal ? (
           <TerminalView
             bridgeId={selectedRuntime?.id ?? ""}
@@ -6654,6 +6680,8 @@ function Switcher({
   onShortcutHelp,
   onCreateSpace,
   onCreateTab,
+  onCreatePane,
+  busy,
   onScopedMenu,
 }: {
   bridgeViews: BridgeConnectionView[];
@@ -6722,6 +6750,8 @@ function Switcher({
   onShortcutHelp: () => void;
   onCreateSpace: () => void;
   onCreateTab: (bridgeId: BridgeId, workspaceId: string) => void;
+  onCreatePane: (bridgeId: BridgeId) => void;
+  busy: boolean;
   onScopedMenu: (
     kind: MenuKind,
     bridgeId: BridgeId,
@@ -7964,6 +7994,11 @@ function Switcher({
               </button>
             ) : null}
           </div>
+        ) : sidebarView !== "notes" && hostScope === "selected" && loadState === "ready" &&
+            snapshot?.panes.length === 0 && snapshot.workspaces.length === 0 && selectedBridgeId ? (
+          <EmptyHost compact hostLabel={bridgeLabel} busy={busy}
+            launchAvailable={supportsLauncherPresets(selectedBridgeView?.runtime.capabilities)}
+            onCreatePane={() => onCreatePane(selectedBridgeId)} />
         ) : (
           <>
             {/* SPACES ---------------------------------------------------- */}
@@ -8160,7 +8195,12 @@ function Switcher({
                 ) : null}
               </div>
 
-              {notesViewActive ? (
+              {sidebarView !== "notes" && hostScope === "selected" && loadState === "ready" &&
+                  snapshot?.panes.length === 0 && selectedBridgeId ? (
+                <EmptyHost compact hostLabel={bridgeLabel} busy={busy}
+                  launchAvailable={supportsLauncherPresets(selectedBridgeView?.runtime.capabilities)}
+                  onCreatePane={() => onCreatePane(selectedBridgeId)} />
+              ) : notesViewActive ? (
                 renderNoteRows()
               ) : sidebarView === "agents" ? (
                 agentPanes.length === 0 && disconnectedBridgeViews.length === 0 ? (

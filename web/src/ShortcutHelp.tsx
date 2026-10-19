@@ -14,7 +14,7 @@ const shortcuts = [
   ["Move between panes", "⌘H / J / K / L"],
   ["Cycle panes in a tab", "⌘Tab / ⌘⇧Tab"],
   ["New tab", "⌘N · ⌘⇧T"],
-  ["New pane (split right)", "⌘T"],
+  ["New pane (first pane or split right)", "⌘T"],
   ["Close pane, or tab if last", "⌘W · ⌘⇧X"],
   ["Split pane right / down", "⌘⇧- / ⌘⇧V"],
 ];

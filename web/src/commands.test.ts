@@ -10,6 +10,66 @@ describe("command helpers", () => {
     vi.restoreAllMocks();
   });
 
+  const newSpace = {
+    workspace: { workspace_id: "new-space" },
+    tab: { tab_id: "initial-tab" },
+    root_pane: { pane_id: "initial-pane" },
+  };
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+  it("reuses the first shell pane when starting on a host without Spaces", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(newSpace))
+      .mockResolvedValueOnce(json({ type: "ok" }));
+    const result = await createCommands((path) => `http://empty-host${path}`).launchPresetWorkspace({
+      presetId: "builtin:shell", label: "Shell", title: "My shell",
+    });
+    expect(result).toMatchObject({ workspace_id: "new-space", tab_id: "initial-tab", pane_id: "initial-pane", title: "My shell" });
+    expect(fetchMock.mock.calls.map(([url, init]) => ({ url, body: JSON.parse(String(init?.body)) }))).toEqual([
+      { url: "http://empty-host/api/command", body: { method: "workspace.create", params: { focus: true } } },
+      { url: "http://empty-host/api/command", body: { method: "pane.rename", params: { pane_id: "initial-pane", label: "My shell" } } },
+    ]);
+  });
+
+  it("launches an agent through the existing remote launcher and removes only its setup shell", async () => {
+    const launched = { preset_id: "custom:agent", title: "Agent", workspace_id: "new-space", tab_id: "agent-tab", pane_id: "agent-pane" };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(newSpace))
+      .mockResolvedValueOnce(json(launched))
+      .mockResolvedValueOnce(json({ type: "ok" }));
+    expect(await createCommands((path) => `http://empty-host${path}`).launchPresetWorkspace({
+      presetId: "custom:agent", label: "Agent", title: "Agent",
+    })).toEqual(launched);
+    expect(fetchMock.mock.calls.map(([url, init]) => ({ url, body: JSON.parse(String(init?.body)) }))).toEqual([
+      { url: "http://empty-host/api/command", body: { method: "workspace.create", params: { focus: true } } },
+      { url: "http://empty-host/api/launcher-presets/launch", body: { preset_id: "custom:agent", title: "Agent", target: { mode: "tab", workspace_id: "new-space" } } },
+      { url: "http://empty-host/api/command", body: { method: "tab.close", params: { tab_id: "initial-tab" } } },
+    ]);
+  });
+
+  it("rolls back only the newly created Space if the chosen preset fails to launch", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(newSpace))
+      .mockResolvedValueOnce(json({ error: "Agent is unavailable" }, 500))
+      .mockResolvedValueOnce(json({ type: "ok" }));
+    await expect(commands.launchPresetWorkspace({ presetId: "builtin:codex", label: "Codex", title: "Codex" }))
+      .rejects.toThrow("Agent is unavailable");
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({
+      method: "workspace.close", params: { workspace_id: "new-space", close_group: false },
+    });
+  });
+
+  it("preserves and selects a successfully launched agent if setup-shell cleanup fails", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(newSpace))
+      .mockResolvedValueOnce(json({ workspace_id: "new-space", tab_id: "agent-tab", pane_id: "agent-pane" }))
+      .mockResolvedValueOnce(json({ error: "Shell tab is busy" }, 500));
+    const result = await commands.launchPresetWorkspace({ presetId: "builtin:codex", label: "Codex", title: "Codex" });
+    expect(result.pane_id).toBe("agent-pane");
+    expect(result.warning).toContain("Shell tab is busy");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("finds created pane ids from supported response shapes", () => {
     expect(createdPaneId({ pane_id: "top" })).toBe("top");
     expect(createdPaneId({ root_pane: { pane_id: "root" } })).toBe("root");

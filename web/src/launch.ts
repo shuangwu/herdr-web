@@ -1,4 +1,4 @@
-import type { PaneInfo } from "./types";
+import type { PaneInfo, WorkspaceInfo } from "./types";
 import type { LauncherPresetOption } from "./launcherPresets";
 
 export type SplitDirection = "right" | "down";
@@ -10,8 +10,19 @@ export type LaunchSpec = {
 };
 
 export type LaunchTarget =
+  | { mode: "workspace" }
   | { mode: "tab"; workspaceId: string }
   | { mode: "split"; pane: PaneInfo; direction: SplitDirection };
+
+export function firstPaneLaunchTarget(
+  workspaces: readonly WorkspaceInfo[],
+  preferredWorkspaceId?: string,
+): Exclude<LaunchTarget, { mode: "split" }> {
+  const workspace = workspaces.find((item) => item.workspace_id === preferredWorkspaceId)
+    ?? workspaces.find((item) => item.focused)
+    ?? workspaces[0];
+  return workspace ? { mode: "tab", workspaceId: workspace.workspace_id } : { mode: "workspace" };
+}
 
 export function launchPresetLabel(presetId: string, options: readonly LauncherPresetOption[]) {
   return options.find((option) => option.id === presetId)?.label ?? "Shell";

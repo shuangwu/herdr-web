@@ -210,6 +210,7 @@ function LaunchOptionIcon({ option }: { option: LauncherPresetOption }) {
 }
 
 function launchTitle(target: LaunchTarget) {
+  if (target.mode === "workspace") return "New pane";
   if (target.mode === "tab") {
     return "New tab";
   }
