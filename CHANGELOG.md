@@ -6,7 +6,7 @@
 
 ### Added
 
-- Add a saved mouse scroll speed setting (0.5×–50×) that applies immediately to terminal scrollback
+- Add a saved mouse scroll speed setting (1×–10×) that applies immediately to terminal scrollback
   and mouse-tracking apps, including split panes.
 
 - Offer the usual shell/agent launcher from empty hosts, with a New pane button and Cmd+N/Cmd+T.
@@ -52,7 +52,7 @@
 
 ### Changed
 
-- Raise the mouse scroll speed ceiling to 50× and batch repeated mouse-wheel reports into one
+- Limit mouse scroll speed to 1×–10×, clamp saved values to the range, and batch repeated wheel reports into one
   input send per wheel event for terminal apps.
 
 - Place the terminal upload button in the lower-right corner and allow dragging it to a saved

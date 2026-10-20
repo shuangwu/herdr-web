@@ -19,11 +19,13 @@ describe("terminal preferences", () => {
   it("preserves scroll speed choices and safely reads old or invalid preferences", () => {
     expect(parseTerminalScrollSpeed(3)).toBe(3);
     expect(parseTerminalScrollSpeed(1.5)).toBe(1.5);
-    expect(parseTerminalScrollSpeed(0)).toBe(0.5);
+    expect(parseTerminalScrollSpeed(0)).toBe(1);
+    expect(parseTerminalScrollSpeed(0.5)).toBe(1);
     expect(parseTerminalScrollSpeed(5)).toBe(5);
-    expect(parseTerminalScrollSpeed(20)).toBe(20);
-    expect(parseTerminalScrollSpeed(50)).toBe(50);
-    expect(parseTerminalScrollSpeed(999)).toBe(50);
+    expect(parseTerminalScrollSpeed(10)).toBe(10);
+    expect(parseTerminalScrollSpeed(20)).toBe(10);
+    expect(parseTerminalScrollSpeed(50)).toBe(10);
+    expect(parseTerminalScrollSpeed(999)).toBe(10);
     for (const value of [undefined, null, "3", NaN, Infinity]) {
       expect(parseTerminalScrollSpeed(value)).toBe(1);
     }
