@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { normalizeWheelLines, WheelStepAccumulator } from "./terminalScroll";
+import { describe, expect, it, vi } from "vitest";
+import { normalizeWheelLines, WheelStepAccumulator, sendTerminalScroll } from "./terminalScroll";
 
 describe("terminal wheel scrolling", () => {
   it("scales pixel, line and page deltas without changing direction", () => {
@@ -49,5 +49,28 @@ describe("terminal wheel scrolling", () => {
     expect(wheel.take(1, 0.5)).toBe(0);
     wheel.reset();
     expect(wheel.take(1, 0.5)).toBe(0);
+  });
+});
+
+
+describe("terminal scroll transport", () => {
+  it("preserves app wheel distance through bridges whose daemon ignores line counts", () => {
+    for (const lines of [1, 40, -40]) {
+      const send = vi.fn();
+      sendTerminalScroll({ send }, lines);
+      const frames = send.mock.calls.map(([data]) => JSON.parse(data));
+      expect(frames).toHaveLength(Math.abs(lines));
+      for (const frame of frames) {
+        expect(frame).toEqual({ type: "scroll", direction: lines < 0 ? "up" : "down", lines: 1 });
+      }
+    }
+  });
+
+  it("bounds scroll bursts and ignores empty or invalid distances", () => {
+    const send = vi.fn();
+    for (const lines of [0, NaN, Infinity, -Infinity]) sendTerminalScroll({ send }, lines);
+    expect(send).not.toHaveBeenCalled();
+    sendTerminalScroll({ send }, 9999);
+    expect(send).toHaveBeenCalledTimes(200);
   });
 });

@@ -1,3 +1,4 @@
+import { sendTerminalScroll } from "./terminalScroll";
 import { useTerminalFocusRequest } from "./useTerminalFocusRequest";
 import { useCommandDraft } from "./commandDrafts";
 import {
@@ -658,13 +659,7 @@ export function TerminalView({
           if (socket?.readyState !== WebSocket.OPEN || lines === 0) {
             return;
           }
-          socket.send(
-            JSON.stringify({
-              type: "scroll",
-              direction: lines < 0 ? "up" : "down",
-              lines: Math.min(Math.abs(lines), 200),
-            }),
-          );
+          sendTerminalScroll(socket, lines);
         });
 
         resizeObserver = new ResizeObserver(() => {

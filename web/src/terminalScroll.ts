@@ -29,3 +29,14 @@ export class WheelStepAccumulator {
     return steps;
   }
 }
+
+export function sendTerminalScroll(socket: Pick<WebSocket, "send">, lines: number) {
+  if (!Number.isFinite(lines)) return;
+  const steps = Math.min(Math.abs(Math.trunc(lines)), 200);
+  if (steps === 0) return;
+  // Herdr ignores `lines` when a terminal app owns scrolling. Send unit steps
+  // so both app wheel actions and host scrollback keep the scaled distance,
+  // including when connecting through an older remote bridge.
+  const frame = JSON.stringify({ type: "scroll", direction: lines < 0 ? "up" : "down", lines: 1 });
+  for (let step = 0; step < steps; step += 1) socket.send(frame);
+}

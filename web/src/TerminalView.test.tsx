@@ -42,8 +42,11 @@ class FakeTerminalRenderer implements TerminalRenderer {
     return () => {};
   }
 
-  onScroll() {
-    return () => {};
+  scrollListener: ((lines: number) => void) | null = null;
+
+  onScroll(callback: (lines: number) => void) {
+    this.scrollListener = callback;
+    return () => { this.scrollListener = null; };
   }
 
   setTapFocusHandler() {}
@@ -167,6 +170,23 @@ afterEach(async () => {
 });
 
 describe("terminal scroll preferences", () => {
+  it("sends scaled wheel steps separately so terminal apps receive the full distance", async () => {
+    const drafts = createCommandDraftStore();
+    await renderTerminalView(testPane("terminal-1"), drafts, false);
+    const renderer = terminalRenderers[0];
+    await act(async () => {
+      renderer.completeMount();
+      await Promise.resolve();
+    });
+    const socket = FakeWebSocket.instances[0];
+    await act(async () => socket.open());
+    socket.sent.length = 0;
+    renderer.scrollListener?.(-40);
+    expect(socket.sent.map((data) => JSON.parse(data))).toEqual(
+      Array.from({ length: 40 }, () => ({ type: "scroll", direction: "up", lines: 1 })),
+    );
+  });
+
   it("applies speed changes to the mounted renderer without reconnecting", async () => {
     const drafts = createCommandDraftStore();
     const pane = testPane("terminal-1");

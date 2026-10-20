@@ -69,6 +69,10 @@
 
 ### Fixed
 
+- Preserve scroll speed in Claude Code and other terminal apps: forward the requested number of
+  wheel actions when Herdr ignores the line count for mouse or alternate-screen scrolling.
+  Works with existing local and remote bridges; no Herdr or bridge update is required.
+
 - Apply mouse scroll speed after wheel-step normalization so small mouse and trackpad
   movements respond to the setting, retaining fractional steps at slower speeds.
 
