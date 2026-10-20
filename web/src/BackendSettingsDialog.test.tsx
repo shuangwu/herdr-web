@@ -60,13 +60,14 @@ describe("BackendSettingsDialog terminal accessibility", () => {
     await act(async () => tab!.click());
     const slider = requiredElement<HTMLInputElement>(container, 'input[type="range"][aria-label="Mouse scroll speed"]');
     expect(slider.value).toBe("1");
+    expect(slider.max).toBe("50");
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(slider, "3");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(slider, "20");
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(onSpeed).toHaveBeenLastCalledWith(3);
-    expect(slider.value).toBe("3");
-    expect(requiredElement<HTMLInputElement>(container, '[aria-label="Mouse scroll speed multiplier"]').value).toBe("3");
+    expect(onSpeed).toHaveBeenLastCalledWith(20);
+    expect(slider.value).toBe("20");
+    expect(requiredElement<HTMLInputElement>(container, '[aria-label="Mouse scroll speed multiplier"]').value).toBe("20");
     await act(async () => requiredElement<HTMLButtonElement>(container, '[aria-label="Reset mouse scroll speed"]').click());
     expect(onSpeed).toHaveBeenLastCalledWith(1);
     expect(slider.value).toBe("1");

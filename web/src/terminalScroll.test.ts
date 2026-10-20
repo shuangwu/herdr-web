@@ -14,7 +14,7 @@ describe("terminal wheel scrolling", () => {
 
   it("scales small pixel and single-line wheel events after normalization", () => {
     for (const event of [{ deltaMode: 0, deltaY: 4 }, { deltaMode: 1, deltaY: 1 }]) {
-      for (const speed of [1, 3, 5]) {
+      for (const speed of [1, 3, 5, 10, 20, 50]) {
         const wheel = new WheelStepAccumulator();
         expect(wheel.take(normalizeWheelLines(event, 40, 0.4), speed)).toBe(speed);
         expect(wheel.take(normalizeWheelLines({ ...event, deltaY: -event.deltaY }, 40, 0.4), speed)).toBe(-speed);

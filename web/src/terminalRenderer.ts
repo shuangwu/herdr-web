@@ -553,14 +553,14 @@ export class GhosttyRenderer implements TerminalRenderer {
     const onCanvas = (event: Event) => event.target === canvas;
     const tracking = () => this.#isCurrentTerminal(terminal) && this.#hasMouseTracking(terminal);
     const send = (action: "press" | "release" | "move" | "wheel-up" | "wheel-down",
-      button: number, event: MouseEvent | WheelEvent) => {
+      button: number, event: MouseEvent | WheelEvent, count = 1) => {
       const { col, row } = touchCellPosition(terminal, event.clientX, event.clientY);
       const data = encodeTerminalMouse(action, button, col + 1, row + 1, {
         shift: event.shiftKey,
         alt: event.altKey || event.metaKey,
         ctrl: event.ctrlKey,
       }, terminal.getMode(1006));
-      if (data) this.#mouseInputCallback?.(data);
+      if (data) this.#mouseInputCallback?.(data.repeat(count));
     };
     const consume = (event: Event) => {
       event.preventDefault();
@@ -598,8 +598,8 @@ export class GhosttyRenderer implements TerminalRenderer {
     const onWheel = (event: WheelEvent) => {
       if (!onCanvas(event) || !tracking() || event.deltaY === 0) return;
       const steps = this.#trackedWheelSteps.take(Math.sign(event.deltaY), this.#wheelScrollSpeed);
-      for (let i = 0; i < Math.abs(steps); i += 1) {
-        send(steps < 0 ? "wheel-up" : "wheel-down", 0, event);
+      if (steps !== 0) {
+        send(steps < 0 ? "wheel-up" : "wheel-down", 0, event, Math.abs(steps));
       }
       consume(event);
     };

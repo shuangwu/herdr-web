@@ -1,6 +1,6 @@
 export const DEFAULT_TERMINAL_SCROLL_SPEED = 1;
 export const MIN_TERMINAL_SCROLL_SPEED = 0.5;
-export const MAX_TERMINAL_SCROLL_SPEED = 5;
+export const MAX_TERMINAL_SCROLL_SPEED = 50;
 
 export function parseTerminalScrollSpeed(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value)) {

@@ -190,7 +190,7 @@ Settings are grouped by area:
 - Features: client feature toggles such as Notes.
 - Display: browser-wide navigation synchronization, agent features in Tabs, multi-host Space
   selection, top/bottom app padding, and mobile terminal controls size.
-- Terminal: font size, mouse scroll speed (0.5×–5×), optional screen-reader text, upload-conflict behavior, browser-to-bridge
+- Terminal: font size, mouse scroll speed (0.5×–50×), optional screen-reader text, upload-conflict behavior, browser-to-bridge
   transport, and input/output batching delays.
 - Mobile: touch-specific terminal behavior when running on a coarse pointer device.
 

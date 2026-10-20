@@ -20,7 +20,10 @@ describe("terminal preferences", () => {
     expect(parseTerminalScrollSpeed(3)).toBe(3);
     expect(parseTerminalScrollSpeed(1.5)).toBe(1.5);
     expect(parseTerminalScrollSpeed(0)).toBe(0.5);
-    expect(parseTerminalScrollSpeed(999)).toBe(5);
+    expect(parseTerminalScrollSpeed(5)).toBe(5);
+    expect(parseTerminalScrollSpeed(20)).toBe(20);
+    expect(parseTerminalScrollSpeed(50)).toBe(50);
+    expect(parseTerminalScrollSpeed(999)).toBe(50);
     for (const value of [undefined, null, "3", NaN, Infinity]) {
       expect(parseTerminalScrollSpeed(value)).toBe(1);
     }
