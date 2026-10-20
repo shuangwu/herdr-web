@@ -10,20 +10,20 @@ export function normalizeWheelLines(
   return Math.trunc(rawLines);
 }
 
-// Mouse-tracking apps previously received one report per wheel event. Scale
-// that rate and retain fractions so slower and non-integer speeds also work.
-export class TrackedWheelSteps {
+// Scale whole terminal steps after normalizing the wheel delta. Retain
+// fractions so small wheel movements respond to every speed, including <1×.
+export class WheelStepAccumulator {
   #pending = 0;
 
   reset() {
     this.#pending = 0;
   }
 
-  take(deltaY: number, speed: number) {
-    if (deltaY === 0) return 0;
-    const direction = Math.sign(deltaY);
+  take(lines: number, speed: number) {
+    if (lines === 0) return 0;
+    const direction = Math.sign(lines);
     if (Math.sign(this.#pending) !== direction) this.reset();
-    this.#pending += direction * speed;
+    this.#pending += lines * speed;
     const steps = Math.trunc(this.#pending);
     this.#pending -= steps;
     return steps;

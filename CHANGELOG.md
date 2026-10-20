@@ -66,6 +66,9 @@
 
 ### Fixed
 
+- Apply mouse scroll speed after wheel-step normalization so small mouse and trackpad
+  movements respond to the setting, retaining fractional steps at slower speeds.
+
 - Keep the top-right pane creation control visible on empty hosts, replace the terminal's passive
   empty message with creation or connection recovery actions, and reconnect stopped remote Herdr
   servers, bridges, and tunnels together.

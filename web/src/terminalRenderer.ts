@@ -51,7 +51,7 @@ import {
 } from "./terminalImeInput";
 import type { TerminalImeState } from "./terminalImeInput";
 import { installTerminalImeFocusRedirect } from "./terminalImeFocus";
-import { normalizeWheelLines, TrackedWheelSteps } from "./terminalScroll";
+import { normalizeWheelLines, WheelStepAccumulator } from "./terminalScroll";
 import { encodeTerminalMouse } from "./terminalMouse";
 
 const TERMINAL_TEXT_INPUT_TAP_GRACE_MS = 4000;
@@ -203,7 +203,8 @@ export class GhosttyRenderer implements TerminalRenderer {
   #container: HTMLElement | null = null;
   #scrollSensitivity = 1;
   #wheelScrollSpeed = 1;
-  #trackedWheelSteps = new TrackedWheelSteps();
+  #trackedWheelSteps = new WheelStepAccumulator();
+  #scrollbackWheelSteps = new WheelStepAccumulator();
   #scrollCallback: ((lines: number) => void) | null = null;
   #touchCleanup: (() => void) | null = null;
   #mouseCleanup: (() => void) | null = null;
@@ -420,8 +421,11 @@ export class GhosttyRenderer implements TerminalRenderer {
   }
 
   setScrollSensitivity(value: number, wheelSpeed = 1) {
+    if (this.#scrollSensitivity !== value || this.#wheelScrollSpeed !== wheelSpeed) {
+      this.#trackedWheelSteps.reset();
+      this.#scrollbackWheelSteps.reset();
+    }
     this.#scrollSensitivity = value;
-    if (this.#wheelScrollSpeed !== wheelSpeed) this.#trackedWheelSteps.reset();
     this.#wheelScrollSpeed = wheelSpeed;
   }
 
@@ -593,7 +597,7 @@ export class GhosttyRenderer implements TerminalRenderer {
     };
     const onWheel = (event: WheelEvent) => {
       if (!onCanvas(event) || !tracking() || event.deltaY === 0) return;
-      const steps = this.#trackedWheelSteps.take(event.deltaY, this.#wheelScrollSpeed);
+      const steps = this.#trackedWheelSteps.take(Math.sign(event.deltaY), this.#wheelScrollSpeed);
       for (let i = 0; i < Math.abs(steps); i += 1) {
         send(steps < 0 ? "wheel-up" : "wheel-down", 0, event);
       }
@@ -624,7 +628,8 @@ export class GhosttyRenderer implements TerminalRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
-      const lines = normalizeWheelLines(event, terminal.rows, this.#scrollSensitivity * this.#wheelScrollSpeed);
+      const baseLines = normalizeWheelLines(event, terminal.rows, this.#scrollSensitivity);
+      const lines = this.#scrollbackWheelSteps.take(baseLines, this.#wheelScrollSpeed);
       if (lines === 0) {
         return true;
       }
