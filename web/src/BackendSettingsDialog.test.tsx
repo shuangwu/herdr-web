@@ -47,6 +47,31 @@ afterEach(async () => {
 });
 
 describe("BackendSettingsDialog terminal accessibility", () => {
+  it("allows changing and resetting the mouse scroll speed in Terminal settings", async () => {
+    const onSpeed = vi.fn();
+    function ScrollSettings() {
+      const [speed, setSpeed] = useState(1);
+      return <BackendSettingsDialog {...settingsProps()} terminalScrollSpeed={speed}
+        onTerminalScrollSpeed={(value) => { onSpeed(value); setSpeed(value); }} />;
+    }
+    const { container } = await render(<ScrollSettings />);
+    const tab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((button) => button.textContent?.includes("Terminal"));
+    await act(async () => tab!.click());
+    const slider = requiredElement<HTMLInputElement>(container, 'input[type="range"][aria-label="Mouse scroll speed"]');
+    expect(slider.value).toBe("1");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(slider, "3");
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(onSpeed).toHaveBeenLastCalledWith(3);
+    expect(slider.value).toBe("3");
+    expect(requiredElement<HTMLInputElement>(container, '[aria-label="Mouse scroll speed multiplier"]').value).toBe("3");
+    await act(async () => requiredElement<HTMLButtonElement>(container, '[aria-label="Reset mouse scroll speed"]').click());
+    expect(onSpeed).toHaveBeenLastCalledWith(1);
+    expect(slider.value).toBe("1");
+  });
+
   it("moves through settings tabs with arrows, Home, and End", async () => {
     const { container } = await render(<BackendSettingsDialog {...settingsProps()} />);
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
@@ -298,6 +323,8 @@ function settingsProps() {
     multiHostSpaceSelection: true,
     onMultiHostSpaceSelection: vi.fn(),
     terminalFontSizePx: 13,
+    terminalScrollSpeed: 1,
+    onTerminalScrollSpeed: vi.fn(),
     onTerminalFontSizePx: vi.fn(),
     terminalFont: "system" as const,
     onTerminalFont: vi.fn(),

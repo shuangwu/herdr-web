@@ -94,6 +94,7 @@ type Props = {
   autoFocus?: boolean;
   /** Wheel scroll speed multiplier; slower on desktop, faster on mobile. */
   scrollSensitivity?: number;
+  terminalScrollSpeed?: number;
   /** Supplemental browser-native input controls for narrow touch screens. */
   mobileControls?: boolean;
   /** Whether to show the expanding command composer without enabling mobile terminal behavior. */
@@ -209,6 +210,7 @@ export function TerminalView({
   wsUrl,
   autoFocus = true,
   scrollSensitivity = 1,
+  terminalScrollSpeed = 1,
   mobileControls = false,
   desktopCommandComposer = false,
   desktopCommandEnterNewline = true,
@@ -289,6 +291,8 @@ export function TerminalView({
   autoFocusRef.current = autoFocus;
   const scrollSensitivityRef = useRef(scrollSensitivity);
   scrollSensitivityRef.current = scrollSensitivity;
+  const terminalScrollSpeedRef = useRef(terminalScrollSpeed);
+  terminalScrollSpeedRef.current = terminalScrollSpeed;
   const desktopCommandComposerRef = useRef(desktopCommandComposer);
   desktopCommandComposerRef.current = desktopCommandComposer;
   const mobileControlsRef = useRef(mobileControls);
@@ -552,11 +556,10 @@ export function TerminalView({
     }
   }, [flushBatchedTerminalInput, terminalInputBatchDelayMs]);
 
-  // Re-apply scroll tuning live when crossing the desktop/mobile breakpoint,
-  // without tearing down the socket.
+  // Apply wheel speed and desktop/mobile scroll tuning live without reconnecting.
   useEffect(() => {
-    rendererRef.current?.setScrollSensitivity(scrollSensitivity);
-  }, [scrollSensitivity]);
+    rendererRef.current?.setScrollSensitivity(scrollSensitivity, terminalScrollSpeed);
+  }, [scrollSensitivity, terminalScrollSpeed]);
 
   useTerminalFocusRequest(
     focusToken,
@@ -633,7 +636,7 @@ export function TerminalView({
           return;
         }
 
-        renderer.setScrollSensitivity(scrollSensitivityRef.current);
+        renderer.setScrollSensitivity(scrollSensitivityRef.current, terminalScrollSpeedRef.current);
         renderer.setTapFocusHandler(
           !mobileControlsRef.current
             ? null

@@ -6,6 +6,9 @@
 
 ### Added
 
+- Add a saved mouse scroll speed setting (0.5×–5×) that applies immediately to terminal scrollback
+  and mouse-tracking apps, including split panes.
+
 - Offer the usual shell/agent launcher from empty hosts, with a New pane button and Cmd+N/Cmd+T.
   Create a Space automatically when needed, using existing remote bridge commands.
 

@@ -12,9 +12,19 @@ import {
   parseTerminalCursorBlink,
   parseTerminalFont,
   parseTerminalTheme,
+  parseTerminalScrollSpeed,
 } from "./terminalPrefs";
 
 describe("terminal preferences", () => {
+  it("preserves scroll speed choices and safely reads old or invalid preferences", () => {
+    expect(parseTerminalScrollSpeed(3)).toBe(3);
+    expect(parseTerminalScrollSpeed(1.5)).toBe(1.5);
+    expect(parseTerminalScrollSpeed(0)).toBe(0.5);
+    expect(parseTerminalScrollSpeed(999)).toBe(5);
+    for (const value of [undefined, null, "3", NaN, Infinity]) {
+      expect(parseTerminalScrollSpeed(value)).toBe(1);
+    }
+  });
   it("accepts supported appearance choices and ignores invalid stored values", () => {
     expect(parseTerminalTheme("solarized")).toBe("solarized");
     expect(parseTerminalTheme("unknown")).toBe("catppuccin");

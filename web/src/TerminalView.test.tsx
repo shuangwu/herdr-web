@@ -77,7 +77,7 @@ class FakeTerminalRenderer implements TerminalRenderer {
 
   clearSelection() {}
 
-  setScrollSensitivity() {}
+  setScrollSensitivity = vi.fn();
 
   dispose() {}
 }
@@ -164,6 +164,25 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("terminal scroll preferences", () => {
+  it("applies speed changes to the mounted renderer without reconnecting", async () => {
+    const drafts = createCommandDraftStore();
+    const pane = testPane("terminal-1");
+    const root = await renderTerminalView(pane, drafts, false);
+    const renderer = terminalRenderers[0];
+    await act(async () => {
+      renderer.completeMount();
+      await Promise.resolve();
+    });
+    expect(renderer.setScrollSensitivity).toHaveBeenLastCalledWith(1, 1);
+    const sockets = [...FakeWebSocket.instances];
+    await renderPane(root, pane, drafts, false, 3);
+    expect(renderer.setScrollSensitivity).toHaveBeenLastCalledWith(1, 3);
+    expect(terminalRenderers).toHaveLength(1);
+    expect(FakeWebSocket.instances).toEqual(sockets);
+  });
 });
 
 describe("terminal clipboard shortcuts", () => {
@@ -432,11 +451,14 @@ async function renderTerminalView(
   return root;
 }
 
+const testUrl = (path: string) => path;
+
 async function renderPane(
   root: Root,
   pane: PaneInfo,
   drafts: ReturnType<typeof createCommandDraftStore>,
   mobileControls = true,
+  terminalScrollSpeed = 1,
 ) {
   await act(async () => {
     root.render(
@@ -446,10 +468,11 @@ async function renderPane(
           pane={pane}
           connectionKey="test-connection"
           resumeToken={0}
-          httpUrl={(path) => path}
-          wsUrl={(path) => path}
+          httpUrl={testUrl}
+          wsUrl={testUrl}
           autoFocus={false}
           mobileControls={mobileControls}
+          terminalScrollSpeed={terminalScrollSpeed}
           terminalOutputCoalesceMs={0}
           selected
           createTerminalRenderer={createFakeTerminalRenderer}

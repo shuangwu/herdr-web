@@ -41,6 +41,10 @@ import {
 } from "./displayPrefs";
 import {
   DEFAULT_TERMINAL_FONT_SIZE_PX,
+  DEFAULT_TERMINAL_SCROLL_SPEED,
+  MIN_TERMINAL_SCROLL_SPEED,
+  MAX_TERMINAL_SCROLL_SPEED,
+  parseTerminalScrollSpeed,
   MAX_TERMINAL_FONT_SIZE_PX,
   MIN_TERMINAL_FONT_SIZE_PX,
   parseTerminalFontSizePx,
@@ -72,6 +76,8 @@ type Props = {
   onCombineMatchingWorkspaceNames: (enabled: boolean) => void;
   multiHostSpaceSelection: boolean;
   onMultiHostSpaceSelection: (enabled: boolean) => void;
+  terminalScrollSpeed: number;
+  onTerminalScrollSpeed: (value: number) => void;
   terminalFontSizePx: number;
   onTerminalFontSizePx: (value: number) => void;
   terminalFont: TerminalFont;
@@ -147,6 +153,8 @@ export function BackendSettingsDialog({
   onCombineMatchingWorkspaceNames,
   multiHostSpaceSelection,
   onMultiHostSpaceSelection,
+  terminalScrollSpeed,
+  onTerminalScrollSpeed,
   terminalFontSizePx,
   onTerminalFontSizePx,
   terminalFont,
@@ -786,6 +794,19 @@ export function BackendSettingsDialog({
                     unit="px"
                     defaultValue={DEFAULT_TERMINAL_FONT_SIZE_PX}
                     onChange={(value) => onTerminalFontSizePx(parseTerminalFontSizePx(value))}
+                  />
+                </div>
+                <div className="settings-row settings-slider-row">
+                  <span title="Applies immediately to mouse-wheel and trackpad scrolling, including terminal apps">Mouse scroll speed</span>
+                  <SliderSettingControl
+                    ariaLabel="Mouse scroll speed"
+                    value={terminalScrollSpeed}
+                    min={MIN_TERMINAL_SCROLL_SPEED}
+                    max={MAX_TERMINAL_SCROLL_SPEED}
+                    step={0.5}
+                    unit="×"
+                    defaultValue={DEFAULT_TERMINAL_SCROLL_SPEED}
+                    onChange={(value) => onTerminalScrollSpeed(parseTerminalScrollSpeed(value))}
                   />
                 </div>
                 {!showMobileTerminalSettings ? (
@@ -1441,7 +1462,7 @@ function SliderSettingControl({
       />
       <div className="settings-value-control">
         <DraftNumberInput
-          ariaLabel={`${ariaLabel} percent`}
+          ariaLabel={`${ariaLabel} ${unit === "%" ? "percent" : "multiplier"}`}
           value={value}
           min={min}
           max={max}

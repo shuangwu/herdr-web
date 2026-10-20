@@ -51,6 +51,7 @@ import {
 } from "./terminalImeInput";
 import type { TerminalImeState } from "./terminalImeInput";
 import { installTerminalImeFocusRedirect } from "./terminalImeFocus";
+import { normalizeWheelLines, TrackedWheelSteps } from "./terminalScroll";
 import { encodeTerminalMouse } from "./terminalMouse";
 
 const TERMINAL_TEXT_INPUT_TAP_GRACE_MS = 4000;
@@ -192,7 +193,7 @@ export type TerminalRenderer = {
   getSelectionText(): string;
   pasteText(text: string): void;
   clearSelection(): void;
-  setScrollSensitivity(value: number): void;
+  setScrollSensitivity(value: number, wheelSpeed?: number): void;
   dispose(): void;
 };
 
@@ -201,6 +202,8 @@ export class GhosttyRenderer implements TerminalRenderer {
   #fitAddon: FitAddon | null = null;
   #container: HTMLElement | null = null;
   #scrollSensitivity = 1;
+  #wheelScrollSpeed = 1;
+  #trackedWheelSteps = new TrackedWheelSteps();
   #scrollCallback: ((lines: number) => void) | null = null;
   #touchCleanup: (() => void) | null = null;
   #mouseCleanup: (() => void) | null = null;
@@ -416,8 +419,10 @@ export class GhosttyRenderer implements TerminalRenderer {
     this.#terminal?.clearSelection();
   }
 
-  setScrollSensitivity(value: number) {
+  setScrollSensitivity(value: number, wheelSpeed = 1) {
     this.#scrollSensitivity = value;
+    if (this.#wheelScrollSpeed !== wheelSpeed) this.#trackedWheelSteps.reset();
+    this.#wheelScrollSpeed = wheelSpeed;
   }
 
   dispose() {
@@ -588,7 +593,10 @@ export class GhosttyRenderer implements TerminalRenderer {
     };
     const onWheel = (event: WheelEvent) => {
       if (!onCanvas(event) || !tracking() || event.deltaY === 0) return;
-      send(event.deltaY < 0 ? "wheel-up" : "wheel-down", 0, event);
+      const steps = this.#trackedWheelSteps.take(event.deltaY, this.#wheelScrollSpeed);
+      for (let i = 0; i < Math.abs(steps); i += 1) {
+        send(steps < 0 ? "wheel-up" : "wheel-down", 0, event);
+      }
       consume(event);
     };
     const onContextMenu = (event: MouseEvent) => {
@@ -616,7 +624,7 @@ export class GhosttyRenderer implements TerminalRenderer {
       }
       event.preventDefault();
       event.stopPropagation();
-      const lines = normalizeWheelLines(event, terminal.rows, this.#scrollSensitivity);
+      const lines = normalizeWheelLines(event, terminal.rows, this.#scrollSensitivity * this.#wheelScrollSpeed);
       if (lines === 0) {
         return true;
       }
@@ -2105,18 +2113,4 @@ function clampNumber(value: number, min: number, max: number) {
 function cssColor(element: Element, property: string, fallback: string) {
   const value = getComputedStyle(element).getPropertyValue(property).trim();
   return value || fallback;
-}
-
-function normalizeWheelLines(event: WheelEvent, rows: number, sensitivity: number) {
-  const unit =
-    event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-      ? rows
-      : event.deltaMode === WheelEvent.DOM_DELTA_LINE
-        ? 1
-        : 1 / 16;
-  const rawLines = event.deltaY * unit * sensitivity;
-  if (Math.abs(rawLines) < 1) {
-    return rawLines < 0 ? -1 : rawLines > 0 ? 1 : 0;
-  }
-  return rawLines < 0 ? Math.ceil(rawLines) : Math.floor(rawLines);
 }

@@ -1,3 +1,14 @@
+export const DEFAULT_TERMINAL_SCROLL_SPEED = 1;
+export const MIN_TERMINAL_SCROLL_SPEED = 0.5;
+export const MAX_TERMINAL_SCROLL_SPEED = 5;
+
+export function parseTerminalScrollSpeed(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_TERMINAL_SCROLL_SPEED;
+  }
+  return Math.min(MAX_TERMINAL_SCROLL_SPEED, Math.max(MIN_TERMINAL_SCROLL_SPEED, value));
+}
+
 export const DEFAULT_TERMINAL_FONT_SIZE_PX = 13;
 export type TerminalTheme = "catppuccin" | "solarized";
 export type TerminalFont = "system" | "menlo" | "jetbrains";

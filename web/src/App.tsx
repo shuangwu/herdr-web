@@ -180,6 +180,7 @@ import {
   DEFAULT_DESKTOP_COMMAND_COMPOSER,
   DEFAULT_DESKTOP_COMMAND_ENTER_NEWLINE,
   DEFAULT_TERMINAL_FONT_SIZE_PX,
+  DEFAULT_TERMINAL_SCROLL_SPEED,
   DEFAULT_TERMINAL_FONT,
   DEFAULT_TERMINAL_THEME,
   defaultTerminalCursorBlink,
@@ -187,6 +188,7 @@ import {
   parseDesktopCommandEnterNewline,
   parseTerminalCursorBlink,
   parseTerminalFontSizePx,
+  parseTerminalScrollSpeed,
   parseTerminalFont,
   parseTerminalTheme,
 } from "./terminalPrefs";
@@ -446,6 +448,7 @@ type DisplayPrefs = {
   notesPanelOpen: boolean;
   sidebarOpen: boolean;
   terminalFontSizePx: number;
+  terminalScrollSpeed: number;
   terminalFont: TerminalFont;
   terminalTheme: TerminalTheme;
   terminalCursorBlink: boolean;
@@ -519,6 +522,7 @@ function readDisplayPrefs(): DisplayPrefs {
     notesPanelOpen: false,
     sidebarOpen: true,
     terminalFontSizePx: DEFAULT_TERMINAL_FONT_SIZE_PX,
+    terminalScrollSpeed: DEFAULT_TERMINAL_SCROLL_SPEED,
     terminalFont: DEFAULT_TERMINAL_FONT,
     terminalTheme: DEFAULT_TERMINAL_THEME,
     terminalCursorBlink: defaultTerminalCursorBlink(),
@@ -724,6 +728,7 @@ function parseDisplayPrefsValue(
       typeof parsed.notesPanelOpen === "boolean" ? parsed.notesPanelOpen : fallback.notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx: parseTerminalFontSizePx(parsed.terminalFontSizePx),
+    terminalScrollSpeed: parseTerminalScrollSpeed(parsed.terminalScrollSpeed),
     terminalFont: parseTerminalFont(parsed.terminalFont),
     terminalTheme: parseTerminalTheme(parsed.terminalTheme),
     terminalCursorBlink: parseTerminalCursorBlink(
@@ -1143,6 +1148,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
   const [terminalFontSizePx, setTerminalFontSizePx] = useState(
     initialPrefs.terminalFontSizePx,
   );
+  const [terminalScrollSpeed, setTerminalScrollSpeed] = useState(initialPrefs.terminalScrollSpeed);
   const [terminalFont, setTerminalFont] = useState(initialPrefs.terminalFont);
   const [terminalTheme, setTerminalTheme] = useState(initialPrefs.terminalTheme);
   const [terminalCursorBlink, setTerminalCursorBlink] = useState(
@@ -1311,6 +1317,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       setSelectedPanesByBridgeId(sharedNavigationPrefs.selectedPanesByBridgeId);
       setActiveWorkspacesByBridgeId(sharedNavigationPrefs.activeWorkspacesByBridgeId);
       setTerminalFontSizePx(prefs.terminalFontSizePx);
+      setTerminalScrollSpeed(prefs.terminalScrollSpeed);
       setTerminalFont(prefs.terminalFont);
       setTerminalTheme(prefs.terminalTheme);
       setTerminalCursorBlink(prefs.terminalCursorBlink);
@@ -1881,6 +1888,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       notesPanelOpen,
       sidebarOpen,
       terminalFontSizePx,
+      terminalScrollSpeed,
       terminalFont,
       terminalTheme,
       terminalCursorBlink,
@@ -1926,6 +1934,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
     notesPanelOpen,
     sidebarOpen,
     terminalFontSizePx,
+    terminalScrollSpeed,
     terminalFont,
     terminalTheme,
     terminalCursorBlink,
@@ -4615,6 +4624,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             desktopCommandEnterNewline={desktopCommandEnterNewline}
             terminalCursorBlink={terminalCursorBlink}
             terminalFontSizePx={terminalFontSizePx}
+            terminalScrollSpeed={terminalScrollSpeed}
             terminalFont={terminalFont}
             terminalTheme={terminalTheme}
             terminalScreenReaderText={terminalScreenReaderText}
@@ -4655,6 +4665,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             desktopCommandEnterNewline={desktopCommandEnterNewline}
             cursorBlink={!isTouchInput && terminalCursorBlink}
             terminalFontSizePx={terminalFontSizePx}
+            terminalScrollSpeed={terminalScrollSpeed}
             terminalFont={terminalFont}
             terminalTheme={terminalTheme}
             terminalScreenReaderText={terminalScreenReaderText}
@@ -4895,7 +4906,9 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
           multiHostSpaceSelection={multiHostSpaceSelection}
           onMultiHostSpaceSelection={setMultiHostSpaceSelection}
           terminalFontSizePx={terminalFontSizePx}
+          terminalScrollSpeed={terminalScrollSpeed}
           onTerminalFontSizePx={setTerminalFontSizePx}
+          onTerminalScrollSpeed={setTerminalScrollSpeed}
           terminalFont={terminalFont}
           onTerminalFont={setTerminalFont}
           terminalTheme={terminalTheme}
@@ -6456,6 +6469,7 @@ function SplitGrid({
   desktopCommandEnterNewline,
   terminalCursorBlink,
   terminalFontSizePx,
+  terminalScrollSpeed,
   terminalFont,
   terminalTheme,
   terminalScreenReaderText,
@@ -6486,6 +6500,7 @@ function SplitGrid({
   desktopCommandEnterNewline: boolean;
   terminalCursorBlink: boolean;
   terminalFontSizePx: number;
+  terminalScrollSpeed: number;
   terminalFont: TerminalFont;
   terminalTheme: TerminalTheme;
   terminalScreenReaderText: boolean;
@@ -6532,6 +6547,7 @@ function SplitGrid({
               desktopCommandEnterNewline={desktopCommandEnterNewline}
               cursorBlink={!touchInput && terminalCursorBlink}
               terminalFontSizePx={terminalFontSizePx}
+              terminalScrollSpeed={terminalScrollSpeed}
               terminalFont={terminalFont}
               terminalTheme={terminalTheme}
               terminalScreenReaderText={terminalScreenReaderText}
