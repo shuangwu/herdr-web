@@ -209,6 +209,7 @@ import {
   chooseSelectedPaneForActiveWorkspace,
   countAttention,
   displayTabLabel,
+  singlePaneTabLabel,
   isLoud,
   paneMeta,
   paneListSubtitle,
@@ -4138,7 +4139,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
       const agent = isAgentPane(pane);
       paletteEntries.push({
         id: `pane:${runtime.id}:${pane.pane_id}`, kind: agent ? "Agent" : "Pane",
-        label: agent ? agentTitle(pane) : paneTitle(pane),
+        label: singlePaneTabLabel(pane, hostSnapshot.tabs, hostSnapshot.panes) ?? (agent ? agentTitle(pane) : paneTitle(pane)),
         detail: `${runtime.label} · ${workspace?.label ?? "Space"}`,
         onSelect: () => openPane(runtime.id, pane),
       });
@@ -4512,7 +4513,7 @@ function AppContent({ commandDrafts }: { commandDrafts: ReturnType<typeof create
             aria-label="Selected pane actions"
             {...selectedPaneMenuPress}
           >
-            <span className="stage-title">{selectedPane ? paneTitle(selectedPane) : selectedRuntime?.label ?? "Choose a host"}</span>
+            <span className="stage-title">{selectedPane ? singlePaneTabLabel(selectedPane, snapshot?.tabs ?? [], snapshot?.panes ?? []) ?? paneTitle(selectedPane) : selectedRuntime?.label ?? "Choose a host"}</span>
             <span className="stage-sub mono">
               {selectedPane ? stageBreadcrumb(snapshot, selectedPane, loadState, selectedRuntime?.canConnect ?? false)
                 : paneConnectionStatus === "unavailable" ? "Disconnected · reconnect to view or create panes"
@@ -7388,6 +7389,7 @@ function Switcher({
                   key={`${group.bridgeId}:${pane.pane_id}`}
                   index={index}
                   pane={pane}
+                  label={singlePaneTabLabel(pane, group.snapshot.tabs, group.snapshot.panes)}
                   workspace={rowContext.workspaceLabel ? group.workspace : undefined}
                   tabLabel={tabLabel}
                   bridgeLabel={rowContext.bridgeLabel}
@@ -7404,6 +7406,7 @@ function Switcher({
                 key={`${group.bridgeId}:${pane.pane_id}`}
                 index={index}
                 pane={pane}
+                label={singlePaneTabLabel(pane, group.snapshot.tabs, group.snapshot.panes)}
                 workspaceLabel={rowContext.workspaceLabel}
                 tabLabel={
                   agentGroup === "none" || agentGroup === "host" ? tabLabel : undefined
@@ -7678,6 +7681,7 @@ function Switcher({
         key={`${entry.bridgeId}:${entry.pane.pane_id}`}
         index={index}
         pane={entry.pane}
+        label={singlePaneTabLabel(entry.pane, entry.snapshot.tabs, entry.snapshot.panes)}
         workspace={rowContext.workspaceLabel ? entry.workspace : undefined}
         tabLabel={entry.tabLabel}
         bridgeLabel={rowContext.bridgeLabel}
@@ -9646,6 +9650,7 @@ function ShortcutBadge({ number }: { number: number }) {
 
 function PaneRow({
   pane,
+  label,
   workspaceLabel,
   tabLabel,
   bridgeLabel,
@@ -9657,6 +9662,7 @@ function PaneRow({
   onMenu,
 }: {
   pane: PaneInfo;
+  label?: string;
   workspaceLabel?: string;
   tabLabel?: string;
   bridgeLabel?: string;
@@ -9670,7 +9676,7 @@ function PaneRow({
   const press = useLongPress(onMenu, onSelect);
   const meta =
     workspaceLabel || tabLabel || bridgeLabel
-      ? paneListSubtitle(pane, workspaceLabel, tabLabel, bridgeLabel)
+      ? paneListSubtitle(pane, workspaceLabel, tabLabel, bridgeLabel, label)
       : paneMeta(pane);
   return (
     <button
@@ -9686,7 +9692,7 @@ function PaneRow({
       <span className="pane-body">
         <span className="pane-name pane-title">
           {shortcutNumber ? <ShortcutBadge number={shortcutNumber} /> : null}
-          <span className="pane-title-text">{paneTitle(pane)}</span>
+          <span className="pane-title-text">{label ?? paneTitle(pane)}</span>
         </span>
         {meta ? <span className="pane-meta mono">{meta}</span> : null}
       </span>
@@ -9704,6 +9710,7 @@ function PaneRow({
 
 function AgentRow({
   pane,
+  label,
   workspace,
   tabLabel,
   bridgeLabel,
@@ -9715,6 +9722,7 @@ function AgentRow({
   onMenu,
 }: {
   pane: PaneInfo;
+  label?: string;
   workspace?: WorkspaceInfo;
   tabLabel?: string;
   bridgeLabel?: string;
@@ -9745,9 +9753,9 @@ function AgentRow({
           {pinned ? (
             <Pin className="agent-pin-indicator" size={10} aria-label="Pinned" />
           ) : null}
-          <span className="pane-title-text">{agentTitle(pane)}</span>
+          <span className="pane-title-text">{label ?? agentTitle(pane)}</span>
         </span>
-        <span className="pane-meta mono">{agentSubtitle(pane, workspace, tabLabel, bridgeLabel)}</span>
+        <span className="pane-meta mono">{agentSubtitle(pane, workspace, tabLabel, bridgeLabel, label)}</span>
       </span>
       {isLoud(pane.agent_status) ? (
         <span className="pane-word" data-status={pane.agent_status}>
@@ -10119,11 +10127,12 @@ export function agentSubtitle(
   workspace?: WorkspaceInfo,
   tabLabel?: string,
   bridgeLabel?: string,
+  displayTitle?: string,
 ) {
   const dir = basename(pane.foreground_cwd || pane.cwd);
   const stateText = pane.state_labels?.[pane.agent_status];
   return [bridgeLabel, workspace?.label, tabLabel, dir, stateText]
-    .filter(Boolean)
+    .filter((part) => Boolean(part) && part !== displayTitle)
     .join(" · ");
 }
 

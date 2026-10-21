@@ -227,6 +227,18 @@ export function displayTabLabel(tab: TabInfo, panes: readonly PaneInfo[]) {
   return paneTitle(tabPanes[0]);
 }
 
+/** A named single-pane tab has the same navigation title everywhere. */
+export function singlePaneTabLabel(
+  pane: PaneInfo,
+  tabs: readonly TabInfo[],
+  panes: readonly PaneInfo[],
+) {
+  const tab = tabs.find((item) => item.tab_id === pane.tab_id);
+  if (!tab || isDefaultTabLabel(tab)) return undefined;
+  const tabPanes = panes.filter((item) => item.tab_id === tab.tab_id);
+  return tabPanes.length === 1 ? displayTabLabel(tab, panes) : undefined;
+}
+
 function isDefaultTabLabel(tab: TabInfo) {
   return /^\d+$/u.test(tab.label.trim());
 }
@@ -274,11 +286,11 @@ export function paneListSubtitle(
   workspaceLabel?: string,
   tabLabel?: string,
   bridgeLabel?: string,
+  displayTitle = paneTitle(pane),
 ) {
-  const title = paneTitle(pane);
   const parts = [bridgeLabel, workspaceLabel, tabLabel, ...paneMeta(pane).split(" · ")];
   return parts
-    .filter((part): part is string => Boolean(part) && part !== title)
+    .filter((part): part is string => Boolean(part) && part !== displayTitle)
     .filter((part, index, items) => items.indexOf(part) === index)
     .join(" · ");
 }

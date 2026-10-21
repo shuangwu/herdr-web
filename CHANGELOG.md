@@ -69,6 +69,9 @@
 
 ### Fixed
 
+- Show saved names of single-pane tabs consistently in the top bar, sidebar, pane header, and
+  command palette; keep individual pane names for split tabs.
+
 - Preserve scroll speed in Claude Code and other terminal apps: forward the requested number of
   wheel actions when Herdr ignores the line count for mouse or alternate-screen scrolling.
   Works with existing local and remote bridges; no Herdr or bridge update is required.

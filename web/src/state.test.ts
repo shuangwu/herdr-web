@@ -8,6 +8,7 @@ import {
   chooseSelectedPane,
   chooseSelectedPaneForActiveWorkspace,
   displayTabLabel,
+  singlePaneTabLabel,
   paneListSubtitle,
   paneSubtitle,
   paneTitle,
@@ -454,5 +455,23 @@ describe("rename clear heuristics", () => {
     expect(canClearWorkspaceName({ ...workspace("herdr-web"), can_clear_name: false }, panes)).toBe(
       false,
     );
+  });
+});
+
+
+describe("single-pane tab navigation names", () => {
+  it("uses the current named tab instead of its generic Shell pane name", () => {
+    const shell = { ...pane("1-1"), label: "Shell" };
+    expect(singlePaneTabLabel(shell, [tab("StreamLit")], [shell])).toBe("StreamLit");
+    expect(singlePaneTabLabel(shell, [tab("vLLM")], [shell])).toBe("vLLM");
+    expect(paneListSubtitle(shell, "Workspace", "StreamLit", "Fovea", "StreamLit"))
+      .toBe("Fovea · Workspace");
+  });
+
+  it("retains individual pane names for split tabs and ordinary numeric tabs", () => {
+    const shell = { ...pane("1-1"), label: "Shell" };
+    expect(singlePaneTabLabel(shell, [tab("1")], [shell])).toBeUndefined();
+    expect(singlePaneTabLabel(shell, [tab("Development")], [shell, pane("1-2")])).toBeUndefined();
+    expect(singlePaneTabLabel(shell, [], [shell])).toBeUndefined();
   });
 });
